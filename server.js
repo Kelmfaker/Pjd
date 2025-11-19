@@ -217,7 +217,4 @@ app.get('/__debug/me', _authenticate, (req, res) => {
 
 await connectToDatabase();
 // log like: console.log('MongoDB connected (serverless)');
-
-const t0 = Date.now();
-const result = await MyModel.find().exec();
-console.log('members.find took', Date.now() - t0, 'ms');
+// log like: console.log('MongoDB connected (serverless)');
