@@ -1,0 +1,111 @@
+<%- include('partials/head', { title: 'إدارة المستخدمين' }) %>
+<%- include('partials/header') %>
+
+<%- include('partials/card-open', { title: 'إدارة حسابات المسؤولين' }) %>
+
+<div style="display:flex;gap:12px;align-items:center;margin-bottom:12px">
+  <button class="btn btn-primary" onclick="openCreateUser()">إنشاء مستخدم جديد</button>
+</div>
+
+<table class="member-table" id="usersTable">
+  <thead>
+    <tr><th>اسم المستخدم</th><th>الاسم</th><th>البريد</th><th>الدور</th><th>إجراءات</th></tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<div id="createModal" style="display:none">
+  <form id="createUserForm" onsubmit="createUser(event)">
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <label>اسم المستخدم<input name="username" class="form-control" required></label>
+      <label>الاسم<input name="name" class="form-control"></label>
+      <label>البريد<input name="email" class="form-control" type="email"></label>
+      <label>كلمة المرور<input name="password" class="form-control" type="password" required></label>
+      <label>الدور
+        <select name="role" class="form-control">
+          <option value="responsible">responsible</option>
+          <option value="secretary">secretary</option>
+          <option value="viewer">viewer</option>
+        </select>
+      </label>
+      <div style="display:flex;gap:8px"><button class="btn btn-primary" type="submit">إنشاء</button> <button type="button" onclick="closeCreate()" class="btn">إلغاء</button></div>
+    </div>
+  </form>
+</div>
+
+<script>
+async function fetchUsers(){
+  const r = await safeFetchJson('/api/users',{ credentials: 'same-origin' });
+  if(!r.ok) return alert('فشل في جلب المستخدمين');
+  const users = r.data;
+  const tbody = document.querySelector('#usersTable tbody');
+  tbody.innerHTML = '';
+  users.forEach(u=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${u.username}</td><td>${u.name||'-'}</td><td>${u.email||'-'}</td><td>${u.role||'-'}</td><td>
+      <button class="btn btn-secondary" onclick="openEdit('${u._id}')">تعديل</button>
+      <button class="btn btn-secondary" onclick="linkToMember('${u._id}')">ربط بعضو</button>
+      <button class="btn btn-delete" onclick="doDelete('${u._id}')">حذف</button>
+    </td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function openCreateUser(){
+  const div = document.getElementById('createModal');
+  div.style.display = 'block';
+}
+function closeCreate(){ document.getElementById('createModal').style.display = 'none'; }
+
+async function createUser(e){
+  e.preventDefault();
+  const fd = Object.fromEntries(new FormData(e.target));
+  const r = await safeFetchJson('/api/users/register',{ method: 'POST', credentials: 'same-origin', headers: {'Content-Type':'application/json'}, body: JSON.stringify(fd) });
+  if(!r.ok) return alert(r.data && r.data.message ? r.data.message : 'فشل الإنشاء');
+  closeCreate(); fetchUsers();
+}
+
+function openEdit(id){
+  // simple prompt-based edit: change role or reset password
+  (async ()=>{
+    try{
+      const role = prompt('ادخل الدور الجديد (admin/secretary/responsible/viewer)');
+      if(role===null) return;
+      const pwd = prompt('أدخل كلمة مرور جديدة (اترك فارغاً إن لم تريد التغيير)');
+      const body = {};
+      if(role) body.role = role;
+      if(pwd) body.password = pwd;
+      const r = await safeFetchJson('/api/users/'+id, { method: 'PUT', credentials: 'same-origin', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      if(!r.ok) return alert(r.data && r.data.message ? r.data.message : 'فشل التحديث');
+      fetchUsers();
+    }catch(err){ console.error(err); alert('خطأ'); }
+  })();
+}
+
+async function doDelete(id){
+  if(!confirm('هل تريد حذف هذا المستخدم؟')) return;
+  const r = await safeFetchJson('/api/users/'+id, { method: 'DELETE', credentials: 'same-origin' });
+  if(!r.ok) return alert(r.data && r.data.message ? r.data.message : 'فشل الحذف');
+  fetchUsers();
+}
+
+async function linkToMember(userId){
+  try{
+    const q = prompt('ادخل رقم العضوية (membershipId) أو بريد العضو أو _id الخاص بالعضو:');
+    if (q === null) return;
+    const payload = {};
+    if (/^[0-9]+$/.test(q.trim())) payload.membershipId = Number(q.trim());
+    else if (/^[0-9a-fA-F]{24}$/.test(q.trim())) payload.memberId = q.trim();
+    else payload.email = q.trim();
+    const r = await safeFetchJson('/api/users/'+userId+'/link-member', { method: 'PUT', credentials: 'same-origin', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    if(!r.ok) return alert(r.data && r.data.message ? r.data.message : 'فشل الربط');
+    alert('تم الربط');
+    fetchUsers();
+  }catch(err){ console.error(err); alert('خطأ'); }
+}
+
+document.addEventListener('DOMContentLoaded', ()=>{ fetchUsers(); });
+</script>
+
+<%- include('partials/card-close') %>
+<%- include('partials/footer') %>

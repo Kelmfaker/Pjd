@@ -1,0 +1,406 @@
+<%- include('partials/head', { title: 'تسجيل الحضور' }) %>
+<%- include('partials/header') %>
+
+  <%- include('partials/card-open', { title: 'تسجيل الحضور' }) %>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div><strong>تسجيل الحضور</strong></div>
+          <div><a href="/attendance/qr" class="btn" style="background:#28a745; text-decoration:none;">تسجيل عبر QR</a></div>
+        </div>
+
+        <label>اختر النشاط:</label>
+        <select id="activitySelect" onchange="loadMembers()">
+          <option value="">-- اختر النشاط --</option>
+          <% activities.forEach(a => { %>
+            <option value="<%= a._id %>"><%= a.title %> ( <%= new Date(a.date).toLocaleDateString('ar-MA') %> )</option>
+          <% }) %>
+        </select>
+
+        <% if (user && (user.role || '').toLowerCase() === 'admin') { %>
+          <label style="margin-left:12px"><input type="checkbox" id="includeAllMembers" onchange="loadMembers()"> شمل جميع الأعضاء (Admin)</label>
+        <% } %>
+
+        <form id="attendanceForm" style="display:none" onsubmit="saveAttendance(event)">
+          <table id="membersTable">
+            <thead>
+              <tr>
+                <th>العضو</th>
+                <th>النوع</th>
+                <th>حضور</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+          <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+            <button class="btn btn-save" type="submit">حفظ الحضور</button>
+            <button type="button" class="btn" onclick="preparePrint(false)">طباعة / حفظ كـ PDF</button>
+            <button type="button" class="btn" onclick="preparePrint(true)">طباعة - الحاضرون فقط</button>
+            <button type="button" class="btn" onclick="preparePrint()">تصدير PDF (خيار)</button>
+            <button type="button" class="btn" onclick="exportPdfServer(false)">تصدير PDF (الخادم)</button>
+            <button type="button" class="btn" onclick="exportPdfServer(true)">تصدير PDF - الحاضرون فقط</button>
+          </div>
+        </form>
+  <%- include('partials/card-close') %>
+
+<script>
+  // Helpers to translate internal codes to Arabic labels
+  function translateStatus(code) {
+    if (!code) return '';
+    const c = String(code).toLowerCase();
+    if (c === 'present') return 'حاضر';
+    if (c === 'absent') return 'غائب';
+    if (c === 'not_registered' || c === 'غير مسجل') return 'غير مسجل';
+    return code;
+  }
+
+  function translateMemberType(type) {
+    if (!type) return '';
+    const t = String(type).toLowerCase();
+    if (t === 'bureau') return 'عضو المكتب';
+    if (t === 'active') return 'عضو عامل';
+    if (t === 'sympathizer') return 'متعاطف';
+    return type;
+  }
+
+async function loadMembers(){
+  const activityId = document.getElementById('activitySelect').value;
+  const form = document.getElementById('attendanceForm');
+  const tbody = document.querySelector('#membersTable tbody');
+  tbody.innerHTML = '';
+  if(!activityId){ form.style.display='none'; return; }
+
+  // جلب تفاصيل النشاط مع المكلفين
+  const resp = await safeFetchJson('/api/activities/' + activityId, { credentials: 'same-origin' });
+  if(!resp.ok){ alert("خطأ في جلب الأعضاء"); return; }
+  const activity = resp.data;
+  // Fetch existing attendance records for this activity and map by memberId
+  const attResp = await safeFetchJson('/api/attendance?activityId=' + activityId, { credentials: 'same-origin' });
+  const existing = attResp.ok ? (attResp.data || []) : [];
+  const attMap = {};
+  existing.forEach(a => {
+    const raw = a && a.memberId ? (a.memberId._id || a.memberId) : a.memberId;
+    if (typeof raw !== 'undefined' && raw !== null) {
+      attMap[String(raw)] = a;
+    }
+  });
+
+  // If admin chose to include all members, fetch members list instead of activity.responsible
+  let membersToRender = activity.responsible || [];
+  const includeAll = document.getElementById('includeAllMembers') && document.getElementById('includeAllMembers').checked;
+  if (includeAll) {
+    const mresp = await safeFetchJson('/api/members?size=200', { credentials: 'same-origin' });
+    if (mresp.ok) {
+      membersToRender = mresp.data || [];
+    } else {
+      console.error('Failed to fetch members for admin includeAll', mresp);
+      alert((mresp.data && mresp.data.message) ? mresp.data.message : 'فشل في جلب قائمة الأعضاء');
+    }
+  }
+
+  membersToRender.forEach(member => {
+    if (!member) return; // skip if populate returned null for a missing referenced member
+    const tr = document.createElement('tr');
+    const memberKey = member._id ? String(member._id) : String(member);
+    const att = attMap[memberKey];
+    let selectedPresent = '';
+    let selectedAbsent = '';
+    if (att) {
+      selectedPresent = att.presenceStatus === 'present' ? 'selected' : '';
+      selectedAbsent = att.presenceStatus === 'absent' ? 'selected' : '';
+    } else {
+      // MAKE BY DEFAULT ABSENT: when there's no attendance record, mark absent
+      selectedAbsent = 'selected';
+    }
+    const displayName = (member.fullName) ? member.fullName : memberKey;
+    const memberType = translateMemberType(member.memberType || member.type || '');
+    const recorderName = att && att.recordedBy && (att.recordedBy.username || att.recordedBy) ? (att.recordedBy.username || att.recordedBy) : '';
+    // Show recorded time only when the record indicates presence
+    const recordedAtText = (att && att.recordedAt && att.presenceStatus === 'present') ? new Date(att.recordedAt).toLocaleString('ar-MA') : '';
+    const recordedInfo = att && (recorderName || recordedAtText) ? `<div class="small" style="font-size:12px;color:#666;margin-top:4px">${recorderName ? 'مسجل بواسطة '+recorderName : ''}${recordedAtText ? ' • '+recordedAtText : ''}</div>` : '';
+    tr.innerHTML = `
+      <td>${displayName}${recordedInfo}</td>
+      <td style="width:140px;text-align:center">${memberType}</td>
+      <td>
+        <select name="presenceStatus">
+          <option value="present" ${selectedPresent}>حاضر</option>
+          <option value="absent" ${selectedAbsent}>غائب</option>
+        </select>
+        <input type="hidden" name="memberId" value="${memberKey}">
+        <input type="hidden" name="method" value="manual">
+        <div style="margin-top:6px">
+          <input type="text" name="comment" placeholder="ملاحظات (اختياري)" style="width:100%;padding:6px;border:1px solid #e6e6e6;border-radius:4px;font-size:12px" />
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+  form.style.display='block';
+
+  // Also render a simple attendance list for the activity (if any)
+  renderAttendanceList(existing);
+  // For admins/secretaries, also fetch the activity report (shows all responsible members and presence status)
+  const role = "<%= user && user.role ? String(user.role).toLowerCase() : '' %>";
+  if (role === 'admin' || role === 'secretary') {
+    const reportResp = await safeFetchJson('/attendance-report/' + activityId, { credentials: 'same-origin' });
+    if (reportResp.ok) {
+      renderActivityReport(reportResp.data.report, reportResp.data.attendanceRate);
+    }
+  }
+}
+
+function renderAttendanceList(attRecords){
+  // Remove previous block if exists
+  let block = document.getElementById('attendanceListBlock');
+  if (block) block.remove();
+  if (!attRecords || attRecords.length === 0) return;
+
+  block = document.createElement('div');
+  block.id = 'attendanceListBlock';
+  block.className = 'card';
+  block.style.marginTop = '12px';
+  const isAdmin = "<%= user && user.role ? String(user.role).toLowerCase() : '' %>" === 'admin';
+    const rows = attRecords.map(a => {
+    const name = (a.memberId && a.memberId.fullName) ? a.memberId.fullName : (a.memberId || '—');
+    const memberType = (a.memberId && (a.memberId.memberType || a.memberId.type)) ? translateMemberType(a.memberId.memberType || a.memberId.type) : '';
+    const when = a.recordedAt ? new Date(a.recordedAt).toLocaleString('ar-MA') : '';
+    const recorder = (a.recordedBy && a.recordedBy.username) ? a.recordedBy.username : (a.recordedBy || '—');
+    const statusLabel = translateStatus(a.presenceStatus);
+    if (isAdmin) {
+      return `<tr><td>${name}</td><td style="text-align:center">${memberType}</td><td>${statusLabel}</td><td>${when}</td><td>${recorder}</td></tr>`;
+    }
+    return `<tr><td>${name}</td><td style="text-align:center">${memberType}</td><td>${statusLabel}</td><td>${when}</td></tr>`;
+  }).join('');
+  block.innerHTML = `
+    <h3>سجل الحضور الحالي</h3>
+    <table style="width:100%;border-collapse:collapse;margin-top:8px">
+      <thead><tr><th>العضو</th><th>النوع</th><th>الحالة</th><th>وقت التسجيل</th>${isAdmin ? '<th>مسجل بواسطة</th>' : ''}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+  document.querySelector('main .container').appendChild(block);
+}
+
+function renderActivityReport(report, rate){
+  // Remove previous report if exists
+  let rep = document.getElementById('activityReportBlock');
+  if (rep) rep.remove();
+  if (!report || report.length === 0) return;
+  rep = document.createElement('div');
+  rep.id = 'activityReportBlock';
+  rep.className = 'card';
+  rep.style.marginTop = '12px';
+  const rows = report.map(r => `<tr><td>${r.fullName}</td><td>${r.presenceStatus}</td></tr>`).join('');
+  rep.innerHTML = `
+    <h3>تقرير النشاط</h3>
+    <table style="width:100%;border-collapse:collapse;margin-top:8px">
+      <thead><tr><th>العضو</th><th>الحالة</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr><th>نسبة الحضور</th><th>${rate}%</th></tr></tfoot>
+    </table>
+  `;
+  document.querySelector('main .container').appendChild(rep);
+}
+
+// Optional client-side PDF export using browser print APIs or a simple fallback
+// Prepare a clean printable view and open print dialog
+async function preparePrint(presentOnly){
+  const activitySelect = document.getElementById('activitySelect');
+  const activityText = activitySelect && activitySelect.options[activitySelect.selectedIndex] ? activitySelect.options[activitySelect.selectedIndex].text : '';
+  const form = document.getElementById('attendanceForm');
+  let rows = Array.from(form.querySelectorAll('tbody tr'));
+
+  console.debug('preparePrint called', { activityText, rowsCount: rows.length, presentOnly: !!presentOnly });
+
+  // If no DOM rows were rendered (e.g. client didn't populate), try fetching attendance from server
+  if ((!rows || rows.length === 0) && activitySelect && activitySelect.value) {
+    try {
+      const url = '/api/attendance?activityId=' + encodeURIComponent(activitySelect.value);
+      const resp = await safeFetchJson(url, { credentials: 'same-origin' });
+      if (resp && resp.ok && Array.isArray(resp.data)) {
+        // create temporary rows array of objects to render
+        rows = resp.data.map(a => {
+          return {
+              _fromServer: true,
+              name: (a.memberId && a.memberId.fullName) ? a.memberId.fullName : (a.memberId || ''),
+              memberType: (a.memberId && (a.memberId.memberType || a.memberId.type)) ? (a.memberId.memberType || a.memberId.type) : '',
+              presenceStatus: a.presenceStatus || '',
+              recordedAt: a.recordedAt || '',
+              recordedBy: (a.recordedBy && a.recordedBy.username) ? a.recordedBy.username : (a.recordedBy || '')
+            };
+        });
+      } else if (resp && resp.data && typeof resp.data === 'string') {
+        // likely an HTML login page or error message (unauthenticated)
+        const bodyStr = resp.data.toLowerCase();
+        if (bodyStr.indexOf('<!doctype') !== -1 || bodyStr.indexOf('<html') !== -1 || bodyStr.indexOf('مطلوب تسجيل الدخول') !== -1 || bodyStr.indexOf('login') !== -1) {
+          alert('يجب تسجيل الدخول لعرض قائمة الحضور للطباعة. الرجاء تسجيل الدخول ثم المحاولة مرة أخرى.');
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('preparePrint: failed to fetch attendance', e);
+    }
+  }
+
+  // Build printable container (larger padding for readability)
+  const container = document.createElement('div');
+  container.id = 'printContainer';
+  container.className = 'print-only';
+  container.style.padding = '28px';
+  // center printable content and use RTL for Arabic
+  container.style.direction = 'rtl';
+  container.style.margin = '0 auto';
+  container.style.maxWidth = '900px';
+
+  // Header with logo and title
+  const header = document.createElement('div');
+  header.style.display = 'flex';
+  header.style.alignItems = 'center';
+  header.style.gap = '12px';
+  const logo = document.createElement('img');
+  logo.src = '/static/images/logo.png';
+  logo.alt = '';
+  logo.style.height = '48px';
+  logo.style.objectFit = 'contain';
+  const title = document.createElement('div');
+  title.innerHTML = `<h2>تقرير الحضور</h2><div>${activityText}</div>`;
+  header.appendChild(logo);
+  header.appendChild(title);
+  container.appendChild(header);
+
+  // Table
+  const table = document.createElement('table');
+  table.style.width = '100%';
+  table.style.borderCollapse = 'collapse';
+  table.style.marginTop = '12px';
+  table.style.tableLayout = 'fixed';
+  const thead = document.createElement('thead');
+  thead.innerHTML = '<tr><th style="border:1px solid #ccc;padding:10px">العضو</th><th style="border:1px solid #ccc;padding:10px">النوع</th><th style="border:1px solid #ccc;padding:10px">الحالة</th><th style="border:1px solid #ccc;padding:10px">وقت التسجيل</th></tr>';
+  table.appendChild(thead);
+  const tbodyPrint = document.createElement('tbody');
+
+  rows.forEach(r => {
+    let nameText = '';
+    let statusText = '';
+    if (r && r._fromServer) {
+      // shape from server
+      if (presentOnly && r.presenceStatus !== 'present') return; // skip non-present when requested
+      nameText = r.name || '';
+      statusText = translateStatus(r.presenceStatus || '');
+      const memberTypeText = translateMemberType(r.memberType || '');
+      const recordedAtText = r.recordedAt ? new Date(r.recordedAt).toLocaleString('ar-MA') : '';
+      const tr = document.createElement('tr');
+      const td1 = document.createElement('td'); td1.textContent = nameText; td1.style.border = '1px solid #ccc'; td1.style.padding = '10px';
+      const tdType = document.createElement('td'); tdType.textContent = memberTypeText; tdType.style.border = '1px solid #ccc'; tdType.style.padding = '10px'; tdType.style.textAlign = 'center';
+      const td2 = document.createElement('td'); td2.textContent = statusText; td2.style.border = '1px solid #ccc'; td2.style.padding = '10px';
+      const tdWhen = document.createElement('td'); tdWhen.textContent = recordedAtText; tdWhen.style.border = '1px solid #ccc'; tdWhen.style.padding = '10px';
+      tr.appendChild(td1); tr.appendChild(tdType); tr.appendChild(td2); tr.appendChild(tdWhen);
+      tbodyPrint.appendChild(tr);
+    } else {
+      // DOM row
+      const nameTd = r.querySelector && r.querySelector('td:first-child');
+      const typeTd = r.querySelector && r.querySelectorAll && r.querySelectorAll('td')[1];
+      const select = r.querySelector && r.querySelector('select[name="presenceStatus"]');
+      const memberIdInput = r.querySelector && r.querySelector('input[name="memberId"]');
+      nameText = nameTd ? nameTd.textContent.trim() : (memberIdInput ? memberIdInput.value : '');
+      const memberTypeText = typeTd ? typeTd.textContent.trim() : '';
+      statusText = select ? (select.options[select.selectedIndex] ? select.options[select.selectedIndex].text : select.value) : '';
+      if (presentOnly && !(select && select.value === 'present')) return; // skip non-present
+      const recordedAtFromDom = (select && select.value === 'present') ? ( (nameTd && nameTd.querySelector && nameTd.querySelector('.small')) ? nameTd.querySelector('.small').textContent.trim() : '' ) : '';
+      const tr = document.createElement('tr');
+      const td1 = document.createElement('td'); td1.textContent = nameText; td1.style.border = '1px solid #ccc'; td1.style.padding = '10px';
+      const tdType = document.createElement('td'); tdType.textContent = memberTypeText; tdType.style.border = '1px solid #ccc'; tdType.style.padding = '10px'; tdType.style.textAlign = 'center';
+      const td2 = document.createElement('td'); td2.textContent = statusText; td2.style.border = '1px solid #ccc'; td2.style.padding = '10px';
+      const tdWhen = document.createElement('td'); tdWhen.textContent = recordedAtFromDom; tdWhen.style.border = '1px solid #ccc'; tdWhen.style.padding = '10px';
+      tr.appendChild(td1); tr.appendChild(tdType); tr.appendChild(td2); tr.appendChild(tdWhen);
+      tbodyPrint.appendChild(tr);
+    }
+  });
+  table.appendChild(tbodyPrint);
+  container.appendChild(table);
+
+  // If no rows were added, show a friendly message instead of an empty table
+  if (!tbodyPrint.children || tbodyPrint.children.length === 0) {
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = 4;
+    td.style.padding = '16px';
+    td.style.textAlign = 'center';
+    td.textContent = 'لا توجد بيانات حضور للطباعة';
+    tr.appendChild(td);
+    tbodyPrint.appendChild(tr);
+  }
+
+  // Attach and print
+  document.body.appendChild(container);
+  // Use timeout to allow layout
+  setTimeout(() => {
+    window.print();
+    // remove after printing
+    setTimeout(() => { container.remove(); }, 500);
+  }, 100);
+}
+
+// Print CSS: hide navigation and buttons and show only .print-only in print
+const style = document.createElement('style');
+style.innerHTML = `
+  @media print {
+    body * { visibility: hidden; }
+    .print-only, .print-only * { visibility: visible; }
+    .print-only { position: absolute; left: 0; top: 0; width: 100%; }
+    nav, header, footer, .no-print { display: none !important; }
+    .card { box-shadow: none !important; }
+    table { width: 100%; border-collapse: collapse; }
+    table th, table td { border: 1px solid #ccc; padding: 6px; }
+  }
+`;
+document.head.appendChild(style);
+
+// Server-side PDF export: downloads PDF generated by server
+async function exportPdfServer(presentOnly){
+  const activityId = document.getElementById('activitySelect').value;
+  if (!activityId) return alert('اختر النشاط أولاً');
+  const url = `/api/export/attendance/pdf?activityId=${encodeURIComponent(activityId)}${presentOnly ? '&presentOnly=true' : ''}`;
+  const r = await safeFetchJson(url, { method: 'GET', credentials: 'same-origin', responseType: 'blob' });
+  if (!r.ok) {
+    const msg = r.data && r.data.message ? r.data.message : 'فشل في إنشاء ملف PDF';
+    return alert(msg);
+  }
+  const blob = r.data;
+  const a = document.createElement('a');
+  const downloadUrl = URL.createObjectURL(blob);
+  a.href = downloadUrl;
+  a.download = `attendance-${activityId}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+}
+
+async function saveAttendance(e){
+  e.preventDefault();
+  const form = e.target;
+  const activityId = document.getElementById('activitySelect').value;
+  const records = Array.from(form.querySelectorAll('tbody tr')).map(tr => ({
+    memberId: tr.querySelector('input[name="memberId"]').value,
+    presenceStatus: tr.querySelector('select[name="presenceStatus"]').value,
+    comment: (tr.querySelector('input[name="comment"]') ? tr.querySelector('input[name="comment"]').value : ''),
+    method: (tr.querySelector('input[name="method"]') ? tr.querySelector('input[name="method"]').value : 'manual')
+  }));
+
+  const r = await safeFetchJson('/attendance', {
+    method:'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type':'application/json' },
+    body: JSON.stringify({ activityId, records })
+  });
+  if(r.ok) {
+    alert("تم حفظ الحضور بنجاح");
+    // refresh members and attendance list to show recordedBy/recordedAt
+    loadMembers();
+  } else {
+    alert((r.data && r.data.message) ? r.data.message : "حدث خطأ أثناء الحفظ");
+  }
+}
+</script>
+
+</body>
+</html>

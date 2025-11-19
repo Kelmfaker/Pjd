@@ -1,0 +1,27 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "PJDAGDAL/api/index.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "PJDAGDAL/public/**",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/favicon.ico",
+      "dest": "/PJDAGDAL/public/favicon.svg"
+    },
+    {
+      "src": "/api/(.*)",
+      "dest": "/PJDAGDAL/api/index.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/PJDAGDAL/api/index.js"
+    }
+  ]
+}

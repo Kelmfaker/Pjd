@@ -1,0 +1,73 @@
+<%- include('partials/head', { title: 'تقرير الحضور' }) %>
+<%- include('partials/header') %>
+
+  <%- include('partials/card-open', { title: 'تقرير الحضور' }) %>
+
+        <div class="summary">
+          <h3>إجمالي حضور الشهر</h3>
+          <p id="monthSummary">جارٍ التحميل...</p>
+        </div>
+
+        <label>اختر النشاط:</label>
+        <select id="activitySelect" onchange="loadReport()">
+          <option value="">-- اختر النشاط --</option>
+          <% activities.forEach(a => { %>
+            <option value="<%= a._id %>"><%= a.title %> ( <%= new Date(a.date).toLocaleDateString('ar-MA') %> )</option>
+          <% }) %>
+        </select>
+
+        <table id="reportTable" style="display:none">
+          <thead>
+            <tr>
+              <th>العضو</th>
+              <th>الحضور</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+          <tfoot>
+            <tr>
+              <th>نسبة الحضور</th>
+              <th id="attendanceRate"></th>
+            </tr>
+          </tfoot>
+        </table>
+
+  <%- include('partials/card-close') %>
+
+<script>
+async function loadMonthSummary(){
+  const resp = await safeFetchJson('/attendance-report/month/summary', { credentials: 'same-origin' });
+  if (resp.ok) {
+    const data = resp.data;
+    document.getElementById('monthSummary').innerText = `الحضور: ${data.presentCount} من ${data.totalAttendances} (${data.attendanceRate}%)`;
+  } else {
+    document.getElementById('monthSummary').innerText = resp.data && resp.data.message ? resp.data.message : 'فشل تحميل التقرير';
+  }
+}
+loadMonthSummary();
+
+async function loadReport(){
+  const activityId = document.getElementById('activitySelect').value;
+  const table = document.getElementById('reportTable');
+  const tbody = table.querySelector('tbody');
+  const rateCell = document.getElementById('attendanceRate');
+  tbody.innerHTML = '';
+  rateCell.innerText = '';
+
+  if(!activityId){ table.style.display='none'; return; }
+
+  const resp = await safeFetchJson('/attendance-report/' + activityId, { credentials: 'same-origin' });
+  if (!resp.ok) { alert(resp.data && resp.data.message ? resp.data.message : 'حدث خطأ في تحميل التقرير'); return; }
+  const data = resp.data;
+  data.report.forEach(r => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${r.fullName}</td><td>${r.presenceStatus}</td>`;
+    tbody.appendChild(tr);
+  });
+  rateCell.innerText = data.attendanceRate + "%";
+  table.style.display='table';
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,47 @@
+<%- include('../partials/head', { title: 'إنشاء Hundel' }) %>
+<%- include('../partials/header') %>
+
+  <style>
+    .form { max-width:600px }
+    label { display:block; margin-top:8px }
+    input, textarea, select { width:100%; padding:8px; box-sizing:border-box }
+    button { margin-top:12px }
+  </style>
+
+  <%- include('../partials/card-open', { title: 'إنشاء Hundel جديد' }) %>
+            <div id="msg" style="color:#c00"></div>
+            <form id="form" class="form">
+    <label>الاسم</label>
+    <input id="name" required />
+
+    <label>الوصف</label>
+    <textarea id="description"></textarea>
+
+  <label>الحالة</label>
+  <select id="status"><option value="active">نشط</option><option value="inactive">غير نشط</option></select>
+
+    <button type="submit">إنشاء</button>
+  </form>
+
+  <script>
+    // use cookie-based auth; UI routes are protected server-side
+    const form = document.getElementById('form');
+    const msg = document.getElementById('msg');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault(); msg.textContent = '';
+      const body = { name: document.getElementById('name').value, description: document.getElementById('description').value, status: document.getElementById('status').value };
+      try {
+        const r = await safeFetchJson('/api/hundels', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if (!r.ok) { msg.textContent = (r.data && r.data.message) ? r.data.message : 'فشل الإنشاء'; return; }
+        location.href = '/hundels';
+      } catch (err) { console.error(err); msg.textContent = 'خطأ بالشبكة'; }
+    });
+    </script>
+
+
+<%- include('../partials/footer') %>
+          </div>
+        </div>
+      </div>
+
+

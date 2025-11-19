@@ -1,0 +1,135 @@
+<%- include('partials/head', { title: 'لوحة التحكم' }) %>
+<%- include('partials/header') %>
+
+  <style>
+    /* Dashboard-specific styles */
+    .container { display: flex; flex-wrap: wrap; padding: 20px; gap: 20px; }
+    .card { background-color: white; border-left: 5px solid #ff6600; padding: 20px; flex: 1 1 200px; min-width: 200px; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
+    .card h2 { margin: 0 0 10px 0; color: #004aad; }
+    .card p { font-size: 18px; margin: 0; }
+  </style>
+
+    <div class="container">
+      <div class="card">
+        <h2>أعضاء المكتب</h2>
+        <p id="bureauCount">—</p>
+      </div>
+      <div class="card">
+        <h2>الأعضاء العاملون</h2>
+        <p id="activeCount">—</p>
+      </div>
+      <div class="card">
+        <h2>المتعاطفون</h2>
+        <p id="sympathizerCount">—</p>
+      </div>
+      <div class="card">
+        <h2>الأنشطة القادمة</h2>
+        <p id="upcomingActivities">—</p>
+      </div>
+      <div class="card">
+        <h2>نسبة الحضور الشهرية</h2>
+        <p id="attendanceRate">—</p>
+      </div>
+    </div>
+    <div style="padding:20px">
+      <button id="logoutBtn">تسجيل الخروج</button>
+    </div>
+
+    <% if (user && user.role === 'admin') { %>
+      <div style="padding:20px;">
+        <h3>لوحة تحكم المدير (إجراءات عامة)</h3>
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          <button id="btnRegenerateAllQr" style="padding:10px;background:#28a745;color:#fff;border:none;border-radius:6px;cursor:pointer">تجديد رموز QR لجميع الأنشطة</button>
+          <button id="btnClearAllAttendance" style="padding:10px;background:#e74c3c;color:#fff;border:none;border-radius:6px;cursor:pointer">حذف كل سجلات الحضور</button>
+          <button id="btnExportData" style="padding:10px;background:#007bff;color:#fff;border:none;border-radius:6px;cursor:pointer">تصدير البيانات (JSON)</button>
+        </div>
+        <div id="adminResult" style="margin-top:12px;color:#333"></div>
+      </div>
+    <% } %>
+
+    <script>
+      // Fetch dashboard overview using cookie-based auth
+      (async ()=>{
+        try{
+          const resp = await safeFetchJson('/overview', { credentials: 'same-origin' });
+          if (!resp.ok) {
+            if (resp.status === 401 || resp.status === 403) { window.location.href = '/login'; return; }
+            console.error('Overview fetch failed', resp.status, resp.data && resp.data.message ? resp.data.message : resp.data);
+            return;
+          }
+          const data = resp.data;
+          document.getElementById('bureauCount').textContent = data.bureauCount + ' عضو';
+          document.getElementById('activeCount').textContent = data.activeCount + ' عضو';
+          document.getElementById('sympathizerCount').textContent = data.sympathizerCount + ' عضو';
+          document.getElementById('upcomingActivities').textContent = data.upcomingActivities + ' نشاط';
+          document.getElementById('attendanceRate').textContent = data.attendanceRate + ' %';
+        }catch(err){ console.error('Failed to load overview', err); }
+      })();
+
+      document.getElementById('logoutBtn').addEventListener('click', async () => {
+        try {
+          await safeFetchJson('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+        } catch (err) { console.error('Logout failed', err); }
+        window.location.href = '/login';
+      });
+
+      // Admin actions
+      const adminResult = document.getElementById('adminResult');
+      const btnRegenerateAllQr = document.getElementById('btnRegenerateAllQr');
+      const btnClearAllAttendance = document.getElementById('btnClearAllAttendance');
+      const btnExportData = document.getElementById('btnExportData');
+
+      if (btnRegenerateAllQr) {
+            btnRegenerateAllQr.addEventListener('click', async () => {
+          if (!confirm('هل أنت متأكد من تجديد رموز QR لجميع الأنشطة؟')) return;
+          btnRegenerateAllQr.disabled = true;
+          adminResult.textContent = 'جارٍ تجديد الرموز...';
+          try {
+            const r = await safeFetchJson('/admin/regenerate-all-qr', { method: 'POST', credentials: 'same-origin' });
+            if (!r.ok) adminResult.textContent = (r.data && r.data.message) ? r.data.message : 'فشل تجديد الرموز';
+            else adminResult.textContent = (r.data && r.data.message ? r.data.message : 'تم') + ' (' + ((r.data && r.data.count) || 0) + ')';
+          } catch (err) { adminResult.textContent = err.message || 'خطأ'; }
+          btnRegenerateAllQr.disabled = false;
+        });
+      }
+
+      if (btnClearAllAttendance) {
+          btnClearAllAttendance.addEventListener('click', async () => {
+          if (!confirm('حذف كل سجلات الحضور سيؤدي لفقدان البيانات. هل تود المتابعة؟')) return;
+          btnClearAllAttendance.disabled = true;
+          adminResult.textContent = 'جارٍ حذف السجلات...';
+          try {
+            const r = await safeFetchJson('/admin/clear-attendance', { method: 'POST', credentials: 'same-origin', headers: {'Content-Type':'application/json'}, body: JSON.stringify({}) });
+            if (!r.ok) adminResult.textContent = (r.data && r.data.message) ? r.data.message : 'فشل الحذف';
+            else adminResult.textContent = (r.data && r.data.message ? r.data.message : 'تم') + ' - عدد المحذوف: ' + ((r.data && r.data.deletedCount) || 0);
+          } catch (err) { adminResult.textContent = err.message || 'خطأ'; }
+          btnClearAllAttendance.disabled = false;
+        });
+      }
+
+      if (btnExportData) {
+        btnExportData.addEventListener('click', async () => {
+          btnExportData.disabled = true; adminResult.textContent = 'جارٍ تصدير البيانات...';
+          try {
+            const r = await safeFetchJson('/admin/export', { credentials: 'same-origin', responseType: 'blob' });
+            if (!r.ok) { adminResult.textContent = 'فشل التصدير'; btnExportData.disabled = false; return; }
+            const blob = r.data;
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'export.json';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+            adminResult.textContent = 'تم تنزيل ملف التصدير';
+          } catch (err) { adminResult.textContent = err.message || 'خطأ'; }
+          btnExportData.disabled = false;
+        });
+      }
+    </script>
+
+
+<%- include('partials/footer') %>
+
+

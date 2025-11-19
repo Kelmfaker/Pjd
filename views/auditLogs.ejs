@@ -1,0 +1,36 @@
+<%- include('partials/head', { title: 'سجل التغييرات' }) %>
+<%- include('partials/header') %>
+
+  <%- include('partials/card-open', { title: 'سجل التغييرات (Audit Log)' }) %>
+        <div id="msg" style="color:#c00"></div>
+        <table style="width:100%; border-collapse:collapse">
+          <thead><tr><th>الوقت</th><th>المستخدم</th><th>الإجراء</th><th>المورد</th><th>المعرف</th><th>قبل</th><th>بعد</th></tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+  <%- include('partials/card-close') %>
+
+  <script>
+    const tbody = document.getElementById('tbody');
+    // use cookie-based auth; UI routes are protected server-side
+
+    async function load() {
+      try {
+  const resp = await safeFetchJson('/audit/api', { credentials: 'same-origin' });
+  if (!resp.ok) { if (resp.status === 401) { location.href='/login' } document.getElementById('msg').textContent = (resp.data && resp.data.message) ? resp.data.message : 'فشل في تحميل السجل'; return; }
+        const data = resp.data;
+        tbody.innerHTML = '';
+        for (const l of data.data) {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td>${new Date(l.createdAt).toLocaleString()}</td><td>${l.actor?l.actor.username:'-'}</td><td>${l.action}</td><td>${l.resourceType}</td><td>${l.resourceId||''}</td><td><pre>${JSON.stringify(l.before||'')}</pre></td><td><pre>${JSON.stringify(l.after||'')}</pre></td>`;
+          tbody.appendChild(tr);
+        }
+  } catch (err) { console.error(err); document.getElementById('msg').textContent = 'خطأ بالشبكة'; }
+    }
+
+    load();
+  </script>
+
+
+<%- include('partials/footer') %>
+
+

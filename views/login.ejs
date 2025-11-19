@@ -1,0 +1,97 @@
+<%- include('partials/head', { title: 'تسجيل الدخول' }) %>
+<%- include('partials/header') %>
+
+  <style>
+    /* Login specific styles */
+    .auth-wrapper { display:flex; align-items:center; justify-content:center; height:70vh; }
+    .card { background:white; padding:24px; border-radius:8px; box-shadow:0 6px 18px rgba(0,0,0,0.08); width:320px }
+    label { display:block; margin-top:12px; font-size:14px }
+    input { width:100%; padding:8px; margin-top:6px; box-sizing:border-box }
+    button { margin-top:16px; width:100%; padding:10px; background:#0b71ff; color:white; border:none; border-radius:4px }
+    .msg { margin-top:12px; color:#c00 }
+  </style>
+
+  <div class="auth-wrapper">
+    <div class="card">
+      <h2>Sign in</h2>
+      <form id="loginForm" action="/login" method="POST">
+        <label for="username">Username</label>
+        <input id="username" name="username" required />
+
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" required />
+
+        <button type="submit">Sign in</button>
+      </form>
+      <div class="msg" id="msg"></div>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById('loginForm');
+    const msg = document.getElementById('msg');
+
+  // read optional query params: next (redirect target) and msg (message to show)
+    const params = new URLSearchParams(window.location.search);
+    const nextUrl = params.get('next') || '/';
+    const message = params.get('msg');
+    if (message) {
+      try { msg.textContent = decodeURIComponent(message); } catch(e) { msg.textContent = message; }
+    }
+
+    form.addEventListener('submit', async (e) => {
+      // If JS is enabled we prevent default and use AJAX to authenticate and redirect client-side.
+      e.preventDefault();
+      msg.textContent = '';
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      try {
+        const resp = await safeFetchJson('/api/auth/login', {
+          method: 'POST',
+          credentials: 'same-origin', // ensure Set-Cookie from server is respected
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+
+        const data = resp.data;
+        if (!resp.ok) {
+          msg.textContent = data && data.message ? data.message : JSON.stringify(data);
+          return;
+        }
+        // store token for later requests (backwards compatibility)
+        if (data && data.token) localStorage.setItem('token', data.token);
+
+        // Determine redirect target:
+        // - if a next URL was provided in the query, prefer it (unless it's just '/').
+        // - otherwise redirect based on the user's role.
+        const roleRedirects = {
+          admin: '/',
+          secretary: '/attendance',
+          responsible: '/activities',
+          viewer: '/members'
+        };
+
+        let target = null;
+        try {
+          const decodedNext = decodeURIComponent(nextUrl || '');
+          if (decodedNext && decodedNext !== '/') target = decodedNext;
+        } catch (e) {
+          if (nextUrl && nextUrl !== '/') target = nextUrl;
+        }
+
+        if (!target) {
+          const role = data.user && data.user.role;
+          target = (role && roleRedirects[role]) ? roleRedirects[role] : '/';
+        }
+
+        window.location.href = target;
+      } catch (err) {
+        msg.textContent = err.message || 'Network error';
+      }
+    });
+  </script>
+
+
+<%- include('partials/footer') %>
+
+

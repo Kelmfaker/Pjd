@@ -1,0 +1,63 @@
+<%- include('partials/head', { title: 'لائحة الحضور للنشاط' }) %>
+<%- include('partials/header') %>
+
+<%- include('partials/card-open', { title: 'لائحة الحضور للنشاط' }) %>
+  <h2><%= activity.title %></h2>
+  <div class="small">التاريخ: <%= activity.date ? new Date(activity.date).toLocaleDateString('ar-MA') : '—' %></div>
+  <div class="small">الموقع: <%= activity.location || '—' %></div>
+  <div style="margin-top:12px">
+    <button class="btn" onclick="window.location.href='/activities'">العودة للأنشطة</button>
+    <button class="btn" onclick="exportPdfServer(false)">تصدير PDF (الخادم)</button>
+    <button class="btn" onclick="exportPdfServer(true)">تصدير PDF - الحاضرون فقط</button>
+  </div>
+
+  <div style="margin-top:12px">
+    <table style="width:100%;border-collapse:collapse">
+      <thead>
+        <tr>
+          <th>العضو</th>
+          <th>النوع</th>
+          <th>الحالة</th>
+          <th>وقت التسجيل</th>
+          <th>مسجل بواسطة</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% attendance.forEach(a => { %>
+          <tr>
+            <td><%= a.memberId && a.memberId.fullName ? a.memberId.fullName : (a.memberId || '—') %></td>
+            <td style="text-align:center"><%= a.memberId && (a.memberId.memberType || a.memberId.type) ? (a.memberId.memberType || a.memberId.type) : '' %></td>
+            <td><%= a.presenceStatus %></td>
+            <td><%= a.recordedAt ? new Date(a.recordedAt).toLocaleString('ar-MA') : '' %></td>
+            <td><%= a.recordedBy && a.recordedBy.username ? a.recordedBy.username : (a.recordedBy || '') %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+
+<%- include('partials/card-close') %>
+
+<script>
+async function exportPdfServer(presentOnly){
+  const activityId = '<%= activity._id %>';
+  const url = `/api/export/attendance/pdf?activityId=${encodeURIComponent(activityId)}${presentOnly ? '&presentOnly=true' : ''}`;
+  const r = await safeFetchJson(url, { method: 'GET', credentials: 'same-origin', responseType: 'blob' });
+  if (!r.ok) {
+    const msg = r.data && r.data.message ? r.data.message : 'فشل في إنشاء ملف PDF';
+    return alert(msg);
+  }
+  const blob = r.data;
+  const a = document.createElement('a');
+  const downloadUrl = URL.createObjectURL(blob);
+  a.href = downloadUrl;
+  a.download = `attendance-${activityId}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+}
+</script>
+
+</body>
+</html>

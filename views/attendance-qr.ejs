@@ -1,0 +1,159 @@
+<%- include('partials/head', { title: 'تسجيل الحضور عبر QR' }) %>
+<%- include('partials/header') %>
+
+  <%- include('partials/card-open', { title: 'تسجيل الحضور عبر QR' }) %>
+        <p class="note">اختر النشاط وادخل رقم العضوية أو اختر العضو ثم أدخل رمز الـ QR المطبوع في واقعة النشاط.</p>
+
+        <div>
+          <label>اختر النشاط</label>
+          <select id="activitySelect">
+            <option value="">-- اختر النشاط --</option>
+            <% activities.forEach(a=>{ %>
+              <option value="<%= a._id %>"><%= a.title %> — <%= new Date(a.date).toLocaleDateString('ar-MA') %></option>
+            <% }) %>
+          </select>
+        </div>
+
+        <div class="row" style="margin-top:12px">
+          <div class="col">
+            <label>رقم العضوية (أو اترك فارغاً لاستخدام اختيار العضو)</label>
+            <input id="membershipId" placeholder="مثال: 102" />
+          </div>
+          <div class="col">
+            <label>عضو (اختياري)</label>
+            <div style="display:flex;gap:8px;align-items:center">
+              <select id="memberSelect" style="flex:1"><option value="">-- اختيار عضو --</option></select>
+              <label style="white-space:nowrap"><input type="checkbox" id="useAllMembers"> عرض كل الأعضاء</label>
+            </div>
+            <div style="margin-top:8px;display:flex;gap:8px">
+              <input id="memberFilter" placeholder="بحث بالاسم أو رقم الاشتراك" style="flex:1" />
+              <button id="refreshMembers" type="button">تحديث</button>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px">
+          <label>رمز الـ QR</label>
+          <input id="qrToken" placeholder="أدخل رمز الـ QR هنا" />
+        </div>
+
+        <div style="margin-top:12px;display:flex;gap:12px">
+          <button id="checkinBtn">تسجيل الحضور</button>
+          <button id="clearBtn" type="button">مسح الحقول</button>
+        </div>
+
+        <div id="result" style="margin-top:12px"></div>
+  <%- include('partials/card-close') %>
+
+  <script>
+    async function fetchAllMembers(){
+      const resp = await safeFetchJson('/api/members?size=500', { credentials: 'same-origin' });
+      if(!resp.ok) return [];
+      return resp.data || [];
+    }
+
+    function translateMemberType(type) {
+      if (!type) return '';
+      const t = String(type).toLowerCase();
+      if (t === 'bureau') return 'عضو المكتب';
+      if (t === 'active') return 'عضو عامل';
+      if (t === 'sympathizer') return 'متعاطف';
+      return type;
+    }
+
+    function applyMemberFilter(members){
+      const sel = document.getElementById('memberSelect');
+      sel.innerHTML = '<option value="">-- اختيار عضو --</option>';
+      const q = (document.getElementById('memberFilter').value || '').toLowerCase().trim();
+      members.forEach(m => {
+        const memberTypeLabel = m._memberTypeLabel || (m.memberType ? translateMemberType(m.memberType) : '');
+        const label = (m.fullName || '') + (m.membershipId ? (' — #' + m.membershipId) : '') + (memberTypeLabel ? (' — '+memberTypeLabel) : '');
+        if (q) {
+          if ((label || '').toLowerCase().indexOf(q) === -1) return;
+        }
+        const opt = document.createElement('option'); opt.value = m._id; opt.textContent = label; sel.appendChild(opt);
+      });
+    }
+
+    async function loadMembersForActivity(activityId){
+      const sel = document.getElementById('memberSelect');
+      sel.innerHTML = '<option value="">-- اختيار عضو --</option>';
+      if(!activityId) return;
+      const useAll = document.getElementById('useAllMembers').checked;
+      if (useAll) {
+        const members = await fetchAllMembers();
+        applyMemberFilter(members);
+        return;
+      }
+      const resp = await safeFetchJson('/api/activities/' + activityId, { credentials: 'same-origin' });
+      if(!resp.ok) return;
+      const activity = resp.data;
+      // if activity has responsible members, populate
+      const responsible = activity.responsible || [];
+      // translate memberType when building label
+      responsible.forEach(m => { if (m && m.memberType) m._memberTypeLabel = translateMemberType(m.memberType); });
+      applyMemberFilter(responsible);
+    }
+
+    document.getElementById('activitySelect').addEventListener('change', (e)=>{
+      loadMembersForActivity(e.target.value);
+    });
+    document.getElementById('useAllMembers').addEventListener('change', ()=>{
+      const activityId = document.getElementById('activitySelect').value;
+      loadMembersForActivity(activityId);
+    });
+    document.getElementById('memberFilter').addEventListener('input', async ()=>{
+      const useAll = document.getElementById('useAllMembers').checked;
+      if (useAll) {
+        const members = await fetchAllMembers();
+        applyMemberFilter(members);
+      } else {
+        // filter current responsible list loaded in select
+        const opts = Array.from(document.getElementById('memberSelect').options).slice(1);
+        const q = (document.getElementById('memberFilter').value || '').toLowerCase().trim();
+        opts.forEach(o => { o.hidden = q && o.text.toLowerCase().indexOf(q) === -1; });
+      }
+    });
+    document.getElementById('refreshMembers').addEventListener('click', async ()=>{
+      const activityId = document.getElementById('activitySelect').value;
+      loadMembersForActivity(activityId);
+    });
+
+    document.getElementById('checkinBtn').addEventListener('click', async ()=>{
+      const activityId = document.getElementById('activitySelect').value;
+      const membershipId = document.getElementById('membershipId').value.trim();
+      const memberId = document.getElementById('memberSelect').value;
+      const qrToken = document.getElementById('qrToken').value.trim();
+      const result = document.getElementById('result');
+      result.textContent = '';
+      if(!activityId || !qrToken || (!memberId && !membershipId)){
+        result.textContent = 'يرجى اختيار النشاط وادخال رمز QR وتحديد العضو أو رقم العضوية.'; return;
+      }
+
+      try{
+        const payload = { qrToken };
+        if(memberId) payload.memberId = memberId;
+        else payload.membershipId = membershipId;
+
+        const r = await safeFetchJson('/api/activities/' + activityId + '/checkin-qr', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type':'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if(!r.ok) result.textContent = (r.data && r.data.message) ? r.data.message : 'خطأ غير معروف';
+        else result.textContent = (r.data && r.data.message) ? r.data.message : 'تم التسجيل';
+      } catch(err){
+        result.textContent = err.message || 'خطأ في الشبكة';
+      }
+    });
+
+    document.getElementById('clearBtn').addEventListener('click', ()=>{
+      document.getElementById('membershipId').value='';
+      document.getElementById('memberSelect').selectedIndex = 0;
+      document.getElementById('qrToken').value = '';
+      document.getElementById('result').textContent = '';
+    });
+  </script>
+</body>
+</html>

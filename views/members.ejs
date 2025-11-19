@@ -1,0 +1,869 @@
+<%- include('partials/head', { title: 'لوحة التحكم' }) %>
+<%- include('partials/header') %>
+
+  <%- include('partials/card-open', { title: 'إدارة الأعضاء' }) %>
+
+    <% if (user && (user.role === 'admin' || user.role === 'secretary')) { %>
+      <button class="btn btn-add" onclick="openMemberAdd()">إضافة عضو جديد</button>
+    <% } else { %>
+      <button class="btn btn-add" data-require-role="admin,secretary">إضافة عضو جديد</button>
+    <% } %>
+
+    <% if (user && (user.role === 'admin' || user.role === 'secretary')) { %>
+      <form id="importForm" style="display:inline-block;margin-left:12px" onsubmit="uploadMembers(event)">
+        <label style="font-weight:600;margin-right:8px">استيراد أعضاء (Excel)</label>
+        <input type="file" id="membersFile" name="file" accept=".xlsx,.xls" required class="form-control" style="display:inline-block;width:auto;vertical-align:middle" />
+        <select id="importMode" name="mode" class="form-control" style="display:inline-block;width:auto;margin-left:6px">
+          <option value="upsert">الاستيراد (تحديث/انشاء)</option>
+          <option value="append">إضافة فقط (انشاء مستندات جديدة)</option>
+          <option value="skip">تخطي الموجودين (لا تحدث)</option>
+        </select>
+        <button class="btn btn-secondary" type="submit" style="vertical-align:middle;margin-left:6px">استيراد</button>
+      </form>
+    <% } %>
+    <!-- Search box -->
+    <div style="display:inline-block; margin-left:12px; vertical-align:middle">
+      <form id="searchForm" onsubmit="doSearch(event)" style="display:flex;gap:6px;align-items:center">
+        <input id="memberSearch" type="search" placeholder="البحث بالاسم" class="form-control" style="width:220px" value="<%= typeof q !== 'undefined' ? q : '' %>" />
+        <button class="btn btn-secondary" type="submit">بحث</button>
+        <button class="btn" type="button" onclick="clearSearch()">مسح</button>
+      </form>
+    </div>
+    <% if (user && (user.role === 'admin' || user.role === 'secretary')) { %>
+      <a href="/api/uploads/template" class="btn btn-secondary" style="margin-left:8px;vertical-align:middle">تحميل قالب Excel</a>
+      <button class="btn btn-delete" style="margin-left:8px;vertical-align:middle" onclick="confirmDeleteAll()">حذف جميع الأعضاء</button>
+      <div style="display:inline-block; margin-left:8px; vertical-align:middle">
+        <select id="bulkFilterType" class="form-control" style="display:inline-block;width:auto">
+          <option value="">-- حذف حسب النوع --</option>
+          <option value="bureau">أعضاء المكتب</option>
+          <option value="active">أعضاء عاملون</option>
+          <option value="sympathizer">متعاطفون</option>
+        </select>
+        <button class="btn btn-secondary" onclick="confirmDeleteByType()" style="margin-left:6px">حذف حسب النوع</button>
+      </div>
+    <% } %>
+
+    <style>
+      /* small styles for sortable headers */
+      .th-sort { background: none; border: none; padding: 0; font: inherit; cursor: pointer; color: inherit; }
+      .th-sort .sort-indicator { display: inline-block; width: 1.2em; text-align: center; }
+      .th-sort.sorted { font-weight: 600; }
+
+      /* member table */
+      .member-table { width: 100%; border-collapse: collapse; }
+      .member-table th, .member-table td { padding: 8px 10px; border-bottom: 1px solid #f0f2f5; vertical-align: top; }
+      .member-table th { background:#fbfdff; text-align: left; color:#0b2540 }
+      .member-table tbody tr:hover { background:#fbfbff }
+      .member-table .small { font-size:0.85em; color:#667085 }
+
+      /* form layout */
+      .member-form { display:block; }
+      .member-form .form-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+      .member-form .form-row { display:flex; flex-direction:column; gap:6px; margin-bottom:8px; }
+      .form-label { font-weight:700; font-size:0.95em; color:#102a43 }
+
+      /* form controls with subtle colored focus */
+      .form-control { padding:10px 12px; border:1px solid #e6edf3; border-radius:8px; font-size:0.95em; background:#ffffff; color:#0b2540 }
+      .form-control:focus { outline:none; border-color:#0b6efd; box-shadow:0 6px 18px rgba(11,110,253,0.06), 0 0 0 4px rgba(11,110,253,0.08); }
+      .form-control[type="file"] { padding:6px }
+      .member-form textarea.form-control { min-height:110px; resize:vertical }
+
+      /* actions and buttons (colored) */
+      .form-actions { display:flex; gap:8px; justify-content:flex-start; margin-top:10px }
+      .btn { padding:6px 10px; border-radius:8px; border:1px solid transparent; cursor:pointer; font-size:0.95em }
+      .btn-primary { background:#0b6efd;color:#fff;border-color:#0b6efd }
+      .btn-primary:hover { background:#0958d6; border-color:#0958d6 }
+      .btn-secondary { background:#f1f5f9;color:#0b2540;border-color:#e6edf3 }
+      .btn-secondary:hover { background:#edf2ff }
+
+      /* edit/delete buttons inside table */
+      .btn-edit { background:#fff; color:#0b6efd; border:1px solid #dbeafe; padding:6px 8px }
+      .btn-edit:hover { background:#f7fbff }
+      .btn-delete { background:#fff; color:#c92a2a; border:1px solid #fde2e2; padding:6px 8px }
+      .btn-delete:hover { background:#fff6f6 }
+
+      /* status badges */
+      .status-badge { display:inline-block; padding:4px 8px; border-radius:999px; font-size:0.85em }
+      .status-badge.active { background:#e6fffa; color:#047857 }
+      .status-badge.inactive { background:#f8fafc; color:#667085 }
+
+      .truncate-ellipsis { max-width:260px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:inline-block; vertical-align:middle }
+      .pdf-link { color:#0b6efd; text-decoration:underline }
+    </style>
+
+    <table class="member-table">
+      <thead>
+        <tr>
+          <th>رقم العضوية</th>
+          <th>
+            <button type="button" class="th-sort" data-field="fullName" onclick="toggleSort('fullName')">الاسم الكامل <span class="sort-indicator"></span></button>
+          </th>
+          <th>الهاتف</th>
+          <th>البريد الإلكتروني</th>
+          <th>المهمة</th>
+          <th>
+            <button type="button" class="th-sort" data-field="memberType" onclick="toggleSort('memberType')">نوع العضوية <span class="sort-indicator"></span></button>
+          </th>
+          <th>
+            <button type="button" class="th-sort" data-field="status" onclick="toggleSort('status')">الحالة <span class="sort-indicator"></span></button>
+          </th>
+          <th>انضم في</th>
+          <th>إجراءات</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% members.forEach(member => { %>
+          <tr data-member-id="<%= member._id %>" style="cursor:pointer">
+            <td class="small"><%= member.membershipId || '-' %></td>
+            <td><strong><%= member.fullName %></strong></td>
+            <td class="small"><%= member.phone || "-" %></td>
+            <td class="small"><%= member.email || "-" %></td>
+            <td class="small"><%= member.role || '-' %></td>
+            <td class="small"><%= member.memberType === 'bureau' ? 'أعضاء المكتب' : member.memberType === 'active' ? 'أعضاء عاملون' : member.memberType === 'sympathizer' ? 'متعاطفون' : (member.memberType || '-') %></td>
+            <td class="small"><%= member.status === 'active' ? 'نشط' : member.status === 'inactive' ? 'غير نشط' : (member.status || '-') %></td>
+            <td class="small"><%= member.joinedAt ? new Date(member.joinedAt).toISOString().slice(0,10) : '-' %></td>
+            <td>
+              <% if (user && (user.role === 'admin' || user.role === 'secretary')) { %>
+                <button class="btn btn-edit" onclick="event.stopPropagation(); editMember('<%= member._id %>')">تعديل</button>
+              <% } else { %>
+                <button class="btn btn-edit" data-require-role="admin,secretary">تعديل</button>
+              <% } %>
+              <% if (user && user.role === 'admin') { %>
+                <button class="btn btn-delete" onclick="event.stopPropagation(); deleteMember('<%= member._id %>')">حذف</button>
+              <% } else { %>
+                <button class="btn btn-delete" data-require-role="admin">حذف</button>
+              <% } %>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+
+    <!-- Pagination controls -->
+    <% if (typeof pagination !== 'undefined') { %>
+      <div id="membersPagination" data-pagination='<%- JSON.stringify(pagination) %>' style="margin-top:12px; display:flex; align-items:center; gap:8px; flex-wrap:wrap">
+        <div class="small">عرض <%= pagination.pageSize %> من أصل <%= pagination.totalCount %> عضو</div>
+        <div id="pageButtons" style="display:flex;gap:6px"></div>
+      </div>
+    <% } %>
+
+  <% /* templates holder - forms will be moved into modal when needed */ %>
+  <div id="formTemplates" style="display:none">
+    <form id="addFormTemplate" class="member-form" onsubmit="addMember(event)">
+      <h3>إضافة عضو جديد</h3>
+      <div class="form-grid">
+        <div class="form-row">
+          <label class="form-label">الاسم الكامل <span style="color:#c00">*</span></label>
+          <input class="form-control" type="text" name="fullName" placeholder="الاسم الكامل" required>
+        </div>
+        <div class="form-row">
+          <label class="form-label">الهاتف</label>
+          <input class="form-control" type="text" name="phone" placeholder="الهاتف">
+        </div>
+        <div class="form-row">
+          <label class="form-label">البريد الإلكتروني</label>
+          <input class="form-control" type="email" name="email" placeholder="البريد الإلكتروني">
+        </div>
+        <div class="form-row">
+          <label class="form-label">العنوان</label>
+          <input class="form-control" type="text" name="address" placeholder="العنوان">
+        </div>
+        <div class="form-row">
+          <label class="form-label">تاريخ الميلاد</label>
+          <input class="form-control" type="date" name="dateOfBirth" placeholder="تاريخ الميلاد">
+        </div>
+        <div class="form-row">
+          <label class="form-label">النوع</label>
+          <select class="form-control" name="gender">
+            <option value="M">ذكر</option>
+            <option value="F">أنثى</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label class="form-label">المهمة (اختَر أو اكتب أخرى)</label>
+          <select class="form-control" name="roleSelect">
+            <option value="الملف المالي">الملف المالي</option>
+            <option value="الاعلام">الاعلام</option>
+            <option value="الانتخابات">الانتخابات</option>
+            <option value="التكوين">التكوين</option>
+            <option value="العلاقة مع الهيئات الموازية والشريكة">العلاقة مع الهيئات الموازية والشريكة</option>
+            <option value="التنظيم">التنظيم</option>
+            <option value="التأطير الخارجي">التأطير الخارجي</option>
+            <option value="التخطيط والمتابعة">التخطيط والمتابعة</option>
+            <option value="تدبير الشأن العام الترابي">تدبير الشأن العام الترابي</option>
+            <option value="العلاقات العامة">العلاقات العامة</option>
+            <option value="تنمية العمل النسائي">تنمية العمل النسائي</option>
+            <option value="العلاقة مع المهنيين">العلاقة مع المهنيين</option>
+            <option value="other">أخرى</option>
+          </select>
+          <input class="form-control role-text-input" type="text" name="role" placeholder="أدخل المهمة إن اخترت أخرى" style="display:none;margin-top:6px">
+        </div>
+        <div class="form-row">
+          <label class="form-label">السيرة / ملاحظات</label>
+          <textarea class="form-control" name="bio" placeholder="سيرة / ملاحظات"></textarea>
+        </div>
+        <div class="form-row">
+          <label class="form-label">رابط ملف PDF (اختياري)</label>
+          <input class="form-control" type="url" name="pdfUrl" placeholder="رابط ملف PDF (اختياري)">
+        </div>
+        <div class="form-row">
+          <label class="form-label">أو معاينة ملف PDF محلي</label>
+          <input class="form-control pdfFileInput" type="file" accept="application/pdf">
+          <div class="pdfPreview" style="display:none;margin-top:8px">
+            <iframe class="pdfPreviewFrame" style="width:100%;height:300px;border:1px solid #ddd"></iframe>
+          </div>
+        </div>
+        <div class="form-row">
+          <label class="form-label">المستوى الدراسي</label>
+          <select class="form-control" name="educationLevel">
+            <option value="none">بدون</option>
+            <option value="primary">ابتدائي</option>
+            <option value="secondary">ثانوي</option>
+            <option value="bachelor">بكالوريوس</option>
+            <option value="master">ماجستير</option>
+            <option value="phd">دكتوراه</option>
+            <option value="other">أخرى</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label class="form-label">المهنة</label>
+          <select class="form-control" name="occupation">
+            <option value="unemployed">عاطل</option>
+            <option value="student">طالب</option>
+            <option value="private">قطاع خاص</option>
+            <option value="public">قطاع عام</option>
+            <option value="self_employed">عمل حر</option>
+            <option value="retired">متقاعد</option>
+            <option value="other">أخرى</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label class="form-label">عضوية في الهيئات المجالية</label>
+          <select class="form-control" name="memberOfRegionalBodies">
+            <option value="false">لا</option>
+            <option value="true">نعم</option>
+          </select>
+        </div>
+        <div class="regional-detail-wrapper" style="display:none">
+          <input class="form-control" type="text" name="memberOfRegionalBodiesDetail" placeholder="إذا كانت نعم، اذكر أين">
+        </div>
+        <div class="form-row">
+          <label class="form-label">مهمة انتدابية</label>
+          <select class="form-control" name="assignedMission">
+            <option value="false">لا</option>
+            <option value="true">نعم</option>
+          </select>
+        </div>
+        <div class="mission-detail-wrapper" style="display:none">
+          <input class="form-control" type="text" name="assignedMissionDetail" placeholder="إن وجدت، صف المهمة">
+        </div>
+        <div class="form-row" style="grid-column:1 / -1">
+          <label class="form-label">تجارب حزبية سابقة</label>
+          <textarea class="form-control" name="previousPartyExperiences" placeholder="اذكر التجارب السابقة"></textarea>
+        </div>
+        <div class="form-row">
+          <label class="form-label">نوع العضوية</label>
+          <select class="form-control" name="memberType">
+            <option value="bureau">أعضاء المكتب</option>
+            <option value="active">أعضاء عاملون</option>
+            <option value="sympathizer">متعاطفون</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label class="form-label">الحالة</label>
+          <select class="form-control" name="status">
+            <option value="active">نشط</option>
+            <option value="inactive">غير نشط</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn-primary" type="submit">إضافة العضو</button>
+        <button type="button" class="btn-secondary" onclick="closeMemberAdd()">إلغاء</button>
+      </div>
+    </form>
+
+    <!-- Edit form (hidden until editing) -->
+    <form id="editFormTemplate" class="member-form" onsubmit="updateMember(event)">
+      <h3>تعديل عضو</h3>
+      <input type="hidden" name="_id" />
+      <div class="form-grid">
+        <div class="form-row">
+          <label class="form-label">الاسم الكامل <span style="color:#c00">*</span></label>
+          <input class="form-control" type="text" name="fullName" placeholder="الاسم الكامل" required>
+        </div>
+        <div class="form-row">
+          <label class="form-label">الهاتف</label>
+          <input class="form-control" type="text" name="phone" placeholder="الهاتف">
+        </div>
+        <div class="form-row">
+          <label class="form-label">البريد الإلكتروني</label>
+          <input class="form-control" type="email" name="email" placeholder="البريد الإلكتروني">
+        </div>
+        <div class="form-row">
+          <label class="form-label">النوع</label>
+          <select class="form-control" name="gender">
+            <option value="M">ذكر</option>
+            <option value="F">أنثى</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label class="form-label">العنوان</label>
+          <input class="form-control" type="text" name="address" placeholder="العنوان">
+        </div>
+        <div class="form-row">
+          <label class="form-label">تاريخ الميلاد</label>
+          <input class="form-control" type="date" name="dateOfBirth" placeholder="تاريخ الميلاد">
+        </div>
+        <div class="form-row">
+          <label class="form-label">نوع العضوية</label>
+          <select class="form-control" name="memberType">
+            <option value="bureau">أعضاء المكتب</option>
+            <option value="active">أعضاء عاملون</option>
+            <option value="sympathizer">متعاطفون</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label class="form-label">المستوى الدراسي</label>
+          <select class="form-control" name="educationLevel">
+            <option value="none">بدون</option>
+            <option value="primary">ابتدائي</option>
+            <option value="secondary">ثانوي</option>
+            <option value="bachelor">بكالوريوس</option>
+            <option value="master">ماجستير</option>
+            <option value="phd">دكتوراه</option>
+            <option value="other">أخرى</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label class="form-label">المهنة</label>
+          <select class="form-control" name="occupation">
+            <option value="unemployed">عاطل</option>
+            <option value="student">طالب</option>
+            <option value="private">قطاع خاص</option>
+            <option value="public">قطاع عام</option>
+            <option value="self_employed">عمل حر</option>
+            <option value="retired">متقاعد</option>
+            <option value="other">أخرى</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label class="form-label">عضوية في الهيئات المجالية</label>
+          <select class="form-control" name="memberOfRegionalBodies">
+            <option value="false">لا</option>
+            <option value="true">نعم</option>
+          </select>
+        </div>
+        <div class="regional-detail-wrapper" style="display:none">
+          <input class="form-control" type="text" name="memberOfRegionalBodiesDetail" placeholder="إذا كانت نعم، اذكر أين">
+        </div>
+        <div class="form-row">
+          <label class="form-label">مهمة انتدابية</label>
+          <select class="form-control" name="assignedMission">
+            <option value="false">لا</option>
+            <option value="true">نعم</option>
+          </select>
+        </div>
+        <div class="mission-detail-wrapper" style="display:none">
+          <input class="form-control" type="text" name="assignedMissionDetail" placeholder="إن وجدت، صف المهمة">
+        </div>
+        <div class="form-row" style="grid-column:1 / -1">
+          <label class="form-label">تجارب حزبية سابقة</label>
+          <textarea class="form-control" name="previousPartyExperiences" placeholder="اذكر التجارب السابقة"></textarea>
+        </div>
+        <div class="form-row">
+          <label class="form-label">المهمة (اختَر أو اكتب أخرى)</label>
+          <select class="form-control" name="roleSelect">
+            <option value="الملف المالي">الملف المالي</option>
+            <option value="الاعلام">الاعلام</option>
+            <option value="الانتخابات">الانتخابات</option>
+            <option value="التكوين">التكوين</option>
+            <option value="العلاقة مع الهيئات الموازية والشريكة">العلاقة مع الهيئات الموازية والشريكة</option>
+            <option value="التنظيم">التنظيم</option>
+            <option value="التأطير الخارجي">التأطير الخارجي</option>
+            <option value="التخطيط والمتابعة">التخطيط والمتابعة</option>
+            <option value="تدبير الشأن العام الترابي">تدبير الشأن العام الترابي</option>
+            <option value="العلاقات العامة">العلاقات العامة</option>
+            <option value="تنمية العمل النسائي">تنمية العمل النسائي</option>
+            <option value="العلاقة مع المهنيين">العلاقة مع المهنيين</option>
+            <option value="other">أخرى</option>
+          </select>
+          <input class="form-control role-text-input" type="text" name="role" placeholder="أدخل المهمة إن اخترت أخرى" style="display:none;margin-top:6px">
+        </div>
+        <div class="form-row">
+          <label class="form-label">السيرة / ملاحظات</label>
+          <textarea class="form-control" name="bio" placeholder="سيرة / ملاحظات"></textarea>
+        </div>
+        <div class="form-row">
+          <label class="form-label">رابط ملف PDF (اختياري)</label>
+          <input class="form-control" type="url" name="pdfUrl" placeholder="رابط ملف PDF (اختياري)">
+        </div>
+        <div class="form-row">
+          <label class="form-label">أو معاينة ملف PDF محلي</label>
+          <input class="form-control pdfFileInput" type="file" accept="application/pdf">
+          <div class="pdfPreview" style="display:none;margin-top:8px">
+            <iframe class="pdfPreviewFrame" style="width:100%;height:300px;border:1px solid #ddd"></iframe>
+          </div>
+        </div>
+        <div class="form-row">
+          <label class="form-label">الحالة</label>
+          <select class="form-control" name="status">
+            <option value="active">نشط</option>
+            <option value="inactive">غير نشط</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn-primary" type="submit">حفظ التعديلات</button>
+        <button type="button" class="btn-secondary" onclick="closeMemberEdit()">إلغاء</button>
+      </div>
+    </form>
+  </div>
+
+  <%- include('partials/modal') %>
+
+    <!-- forms moved into templates above and will be shown in modal -->
+
+      <%- include('partials/card-close') %>
+
+<script>
+// Sorting helpers for clickable headers
+function getSortParams(){
+  const p = new URLSearchParams(location.search);
+  return { sort: p.get('sort'), order: p.get('order') || 'asc' };
+}
+
+function toggleSort(field){
+  const p = new URLSearchParams(location.search);
+  const current = p.get('sort');
+  let order = p.get('order') || 'asc';
+  if(current === field){
+    order = (order === 'asc') ? 'desc' : 'asc';
+  } else {
+    order = 'asc';
+  }
+  p.set('sort', field);
+  // reset to first page when sorting changes
+  p.set('page', '1');
+  p.set('order', order);
+  // navigate preserving other params
+  location.search = p.toString();
+}
+
+// render pagination buttons when server provided pagination metadata
+function renderPagination(pagination){
+  if(!pagination) return;
+  const container = document.getElementById('pageButtons');
+  if(!container) return;
+  container.innerHTML = '';
+  const page = Number(pagination.page || 1);
+  const total = Number(pagination.totalPages || 1);
+  const range = 2; // show pages around current
+
+  const makeBtn = (label, targetPage, disabled=false, active=false) => {
+    const a = document.createElement('a');
+    a.href = '#';
+    a.textContent = label;
+    a.style.padding = '6px 8px';
+    a.style.border = '1px solid #e6edf3';
+    a.style.borderRadius = '6px';
+    a.style.textDecoration = 'none';
+    a.style.color = active ? '#fff' : '#0b2540';
+    a.style.background = active ? '#0b6efd' : 'transparent';
+    a.dataset.page = String(targetPage);
+    if(disabled) { a.style.opacity = '0.5'; a.style.pointerEvents = 'none'; }
+    a.addEventListener('click', (e)=>{ e.preventDefault(); if(disabled) return; gotoPage(targetPage); });
+    return a;
+  };
+
+  // first / prev
+  container.appendChild(makeBtn('<<', 1, page === 1));
+  container.appendChild(makeBtn('<', Math.max(1, page - 1), page === 1));
+
+  // numbers
+  const start = Math.max(1, page - range);
+  const end = Math.min(total, page + range);
+  if (start > 1) container.appendChild(makeBtn('1', 1));
+  if (start > 2) {
+    const dots = document.createElement('span'); dots.textContent = '...'; dots.style.padding = '6px 8px'; container.appendChild(dots);
+  }
+  for(let i = start; i <= end; i++){
+    container.appendChild(makeBtn(String(i), i, false, i === page));
+  }
+  if (end < total-1) {
+    const dots = document.createElement('span'); dots.textContent = '...'; dots.style.padding = '6px 8px'; container.appendChild(dots);
+  }
+  if (end < total) container.appendChild(makeBtn(String(total), total));
+
+  // next / last
+  container.appendChild(makeBtn('>', Math.min(total, page + 1), page === total));
+  container.appendChild(makeBtn('>>', total, page === total));
+}
+
+function gotoPage(pageNum){
+  const p = new URLSearchParams(location.search);
+  p.set('page', String(pageNum));
+  location.search = p.toString();
+}
+
+// search helpers
+function doSearch(e){
+  if(e && e.preventDefault) e.preventDefault();
+  const q = (document.getElementById('memberSearch') && document.getElementById('memberSearch').value) || '';
+  const p = new URLSearchParams(location.search);
+  if(q && String(q).trim()) p.set('q', String(q).trim());
+  else p.delete('q');
+  p.set('page','1');
+  location.search = p.toString();
+}
+
+function clearSearch(){
+  const p = new URLSearchParams(location.search);
+  p.delete('q');
+  p.set('page','1');
+  location.search = p.toString();
+}
+
+function updateSortIndicators(){
+  const { sort, order } = getSortParams();
+  document.querySelectorAll('.th-sort').forEach(btn => {
+    const f = btn.dataset.field;
+    const ind = btn.querySelector('.sort-indicator');
+    if(!ind) return;
+    if(f === sort){
+      ind.textContent = order === 'asc' ? '▲' : '▼';
+      btn.classList.add('sorted');
+    } else {
+      ind.textContent = '';
+      btn.classList.remove('sorted');
+    }
+  });
+}
+
+    document.addEventListener('DOMContentLoaded', ()=>{
+      updateSortIndicators();
+      attachRowClickDelegation();
+      // render pagination if provided by server
+      try{
+          // embed pagination object safely using a data attribute fallback
+          const paginationEl = document.getElementById('membersPagination');
+          if(paginationEl){
+            try{
+              const json = paginationEl.getAttribute('data-pagination');
+              const serverPagination = json ? JSON.parse(json) : null;
+              if(serverPagination) renderPagination(serverPagination);
+            }catch(e){ /* ignore JSON issues */ }
+          }
+      }catch(e){ /* ignore JSON issues */ }
+    });
+
+    // delegated click handler for member rows (uses data-member-id set inside the loop)
+    function attachRowClickDelegation(){
+      const tbody = document.querySelector('.member-table tbody');
+      if(!tbody) return;
+      tbody.addEventListener('click', (e)=>{
+        // if a button or link was clicked, don't treat as row click
+        if(e.target.closest('button, a')) return;
+        const tr = e.target.closest('tr[data-member-id]');
+        if(!tr) return;
+        const id = tr.dataset.memberId;
+        if(id) showMemberDetail(id);
+      });
+    }
+
+// Modal-aware helpers for members
+function openMemberAdd(){
+  const template = document.getElementById('addFormTemplate');
+  if(!template) return alert('نموذج غير موجود');
+  // clone the template so the original stays in place
+  const form = template.cloneNode(true);
+  form.id = 'addForm';
+  // ensure the cloned form does not remain hidden
+  form.style.display = '';
+  document.getElementById('addModalTitle').textContent = 'إضافة عضو جديد';
+  const body = document.getElementById('addModalBody');
+  body.innerHTML = '';
+  body.appendChild(form);
+  // attach handlers so PDF preview works for cloned form
+  attachPdfPreviewHandlers(form);
+  // attach conditional show/hide handlers
+  attachConditionalFieldsHandlers(form);
+  attachRoleSelector(form);
+  openModal('addModal');
+}
+function closeMemberAdd(){
+  // remove any cloned form from modal body and keep the template intact
+  const body = document.getElementById('addModalBody');
+  if(body) body.innerHTML = '';
+  closeModal('addModal');
+}
+function closeMemberEdit(){
+  const body = document.getElementById('editModalBody');
+  if(body) body.innerHTML = '';
+  closeModal('editModal');
+}
+
+// attach client-side PDF preview behavior for a cloned form
+function attachPdfPreviewHandlers(form){
+  if(!form) return;
+  const fileInput = form.querySelector('.pdfFileInput');
+  const previewWrap = form.querySelector('.pdfPreview');
+  const previewFrame = form.querySelector('.pdfPreviewFrame');
+    if(fileInput){
+        fileInput.addEventListener('change', (e)=>{
+      const f = e.target.files && e.target.files[0];
+      if(f){
+        try{
+          const url = URL.createObjectURL(f);
+          if(previewFrame){ previewFrame.src = url; }
+          if(previewWrap) previewWrap.style.display = 'block';
+        }catch(err){ console.error('خطأ في معاينة الملف', err); }
+      } else {
+        if(previewFrame) previewFrame.src = '';
+        if(previewWrap) previewWrap.style.display = 'none';
+      }
+    });
+    }
+  // when user fills pdfUrl, show preview
+  const urlInput = form.querySelector('input[name="pdfUrl"]');
+  if(urlInput){
+    urlInput.addEventListener('input', (e)=>{
+      const v = (e.target.value || '').trim();
+      if(v && previewFrame){ previewFrame.src = v; if(previewWrap) previewWrap.style.display = 'block'; }
+      else { if(previewFrame) previewFrame.src = ''; if(previewWrap) previewWrap.style.display = 'none'; }
+    });
+  }
+}
+
+// attach role selector: keep a text input named 'role' in sync with a select[name="roleSelect"].
+function attachRoleSelector(form){
+  if(!form) return;
+  const sel = form.querySelector('select[name="roleSelect"]');
+  const roleInput = form.querySelector('input[name="role"]');
+  if(!sel || !roleInput) return;
+  const update = ()=>{
+    if(sel.value === 'other'){
+      roleInput.style.display = '';
+      // if user previously typed a custom role, keep it
+      if(!roleInput.value) roleInput.value = '';
+    } else {
+      roleInput.style.display = 'none';
+      roleInput.value = sel.value || '';
+    }
+  };
+  sel.addEventListener('change', update);
+  update();
+}
+
+// attach conditional show/hide for detail fields (regional bodies, assigned mission)
+function attachConditionalFieldsHandlers(form){
+  if(!form) return;
+  const regionalSelect = form.querySelector('select[name="memberOfRegionalBodies"]');
+  const regionalWrapper = form.querySelector('.regional-detail-wrapper');
+  if(regionalSelect && regionalWrapper){
+    const updateRegional = ()=>{ regionalWrapper.style.display = (regionalSelect.value === 'true') ? 'block' : 'none'; };
+    regionalSelect.addEventListener('change', updateRegional);
+    updateRegional();
+  }
+
+  const missionSelect = form.querySelector('select[name="assignedMission"]');
+  const missionWrapper = form.querySelector('.mission-detail-wrapper');
+  if(missionSelect && missionWrapper){
+    const updateMission = ()=>{ missionWrapper.style.display = (missionSelect.value === 'true') ? 'block' : 'none'; };
+    missionSelect.addEventListener('change', updateMission);
+    updateMission();
+  }
+}
+
+async function addMember(e){
+  e.preventDefault();
+  const form = e.target;
+  const data = Object.fromEntries(new FormData(form));
+  const r = await safeFetchJson('/api/members', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type':'application/json' }, body: JSON.stringify(data) });
+  if(r.ok) return location.reload();
+  alert(r.data && r.data.message ? r.data.message : 'حدث خطأ عند إضافة العضو');
+}
+
+async function deleteMember(id){
+  showConfirm('هل تريد حذف هذا العضو؟', async ()=>{
+    const r = await safeFetchJson('/api/members/' + id, { method: 'DELETE', credentials: 'same-origin' });
+    if(r.ok) location.reload();
+    else alert(r.data && r.data.message ? r.data.message : 'حدث خطأ عند الحذف');
+  });
+}
+
+function confirmDeleteAll(){
+  showConfirm('هل تريد حذف جميع الأعضاء؟ هذا الإجراء لا يمكن التراجع عنه.', async ()=>{
+    try{
+      const r = await safeFetchJson('/api/members?confirm=true',{ method: 'DELETE', credentials: 'same-origin' });
+      if(r.ok){ alert(r.data && r.data.message ? r.data.message : 'تم الحذف'); location.reload(); }
+      else alert(r.data && r.data.message ? r.data.message : 'فشل الحذف');
+    }catch(err){ console.error(err); alert('خطأ في الشبكة'); }
+  });
+}
+
+function confirmDeleteByType(){
+  const sel = document.getElementById('bulkFilterType');
+  if(!sel) return alert('اختر نوعاً');
+  const v = sel.value;
+  if(!v) return alert('اختر نوعاً صالحاً');
+  showConfirm(`هل تريد حذف جميع الأعضاء من النوع ${v}؟ هذا الإجراء لا يمكن التراجع عنه.`, async ()=>{
+    try{
+      const url = '/api/members?memberType=' + encodeURIComponent(v);
+      const r = await safeFetchJson(url, { method: 'DELETE', credentials: 'same-origin' });
+      if(r.ok){ alert(r.data && r.data.message ? r.data.message : 'تم الحذف'); location.reload(); }
+      else alert(r.data && r.data.message ? r.data.message : 'فشل الحذف');
+    }catch(err){ console.error(err); alert('خطأ في الشبكة'); }
+  });
+}
+
+function editMember(id){
+  (async () => {
+    try {
+      const r = await safeFetchJson('/api/members/' + id, { credentials: 'same-origin' });
+      if(!r.ok) return alert(r.data && r.data.message ? r.data.message : 'فشل في جلب بيانات العضو');
+      const member = r.data;
+      // clone template into modal so original template stays hidden
+      const template = document.getElementById('editFormTemplate');
+      if(!template) return alert('نموذج التعديل غير موجود');
+      const form = template.cloneNode(true);
+      form.id = 'editForm';
+      form.style.display = '';
+      // populate fields
+      form.querySelector('input[name="_id"]').value = member._id;
+      form.querySelector('input[name="fullName"]').value = member.fullName || '';
+      form.querySelector('input[name="phone"]').value = member.phone || '';
+      form.querySelector('input[name="email"]').value = member.email || '';
+      form.querySelector('input[name="address"]').value = member.address || '';
+      // dateOfBirth may be a Date; if present, format to yyyy-mm-dd for input[type=date]
+      try {
+        form.querySelector('input[name="dateOfBirth"]').value = member.dateOfBirth ? new Date(member.dateOfBirth).toISOString().slice(0,10) : '';
+      } catch (e) {
+        form.querySelector('input[name="dateOfBirth"]').value = member.dateOfBirth || '';
+      }
+      form.querySelector('select[name="gender"]').value = member.gender || 'M';
+      form.querySelector('select[name="memberType"]').value = member.memberType || 'active';
+      form.querySelector('input[name="role"]').value = member.role || '';
+      form.querySelector('textarea[name="bio"]').value = member.bio || '';
+      form.querySelector('input[name="pdfUrl"]').value = member.pdfUrl || '';
+  // new fields
+  form.querySelector('select[name="educationLevel"]').value = member.educationLevel || 'other';
+  form.querySelector('select[name="occupation"]').value = member.occupation || 'other';
+  form.querySelector('select[name="memberOfRegionalBodies"]').value = (member.memberOfRegionalBodies ? 'true' : 'false');
+  form.querySelector('input[name="memberOfRegionalBodiesDetail"]').value = member.memberOfRegionalBodiesDetail || '';
+  form.querySelector('select[name="assignedMission"]').value = (member.assignedMission ? 'true' : 'false');
+  form.querySelector('input[name="assignedMissionDetail"]').value = member.assignedMissionDetail || '';
+  form.querySelector('textarea[name="previousPartyExperiences"]').value = member.previousPartyExperiences || '';
+      // show PDF preview if url provided
+      const pv = form.querySelector('.pdfPreview');
+      const pf = form.querySelector('.pdfPreviewFrame');
+      if(member.pdfUrl && pf && pv){ pf.src = member.pdfUrl; pv.style.display = 'block'; } else if(pf && pv){ pf.src = ''; pv.style.display = 'none'; }
+      form.querySelector('select[name="status"]').value = member.status || 'active';
+      document.getElementById('editModalTitle').textContent = 'تعديل عضو';
+      const body = document.getElementById('editModalBody');
+      body.innerHTML = '';
+  body.appendChild(form);
+  // attach handlers so PDF preview + conditional fields work for cloned form
+  attachPdfPreviewHandlers(form);
+  attachConditionalFieldsHandlers(form);
+  attachRoleSelector(form);
+  // if editing, initialize role select/text from fetched member data
+  try{
+    const sel = form.querySelector('select[name="roleSelect"]');
+    const roleInput = form.querySelector('input[name="role"]');
+    if(sel && roleInput){
+      const match = Array.from(sel.options).some(o => o.value === (member.role || ''));
+      if(match){ sel.value = member.role; roleInput.style.display = 'none'; roleInput.value = member.role || ''; }
+      else { sel.value = 'other'; roleInput.style.display = ''; roleInput.value = member.role || ''; }
+    }
+  }catch(e){ /* ignore if not edit context */ }
+  openModal('editModal');
+    } catch (err) {
+      console.error(err);
+      alert('خطأ في الشبكة');
+    }
+  })();
+}
+
+async function updateMember(e){
+  e.preventDefault();
+  const form = e.target;
+  const data = Object.fromEntries(new FormData(form));
+  const id = data._id; delete data._id;
+  try {
+    const r = await safeFetchJson('/api/members/' + id, { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type':'application/json' }, body: JSON.stringify(data) });
+    if(!r.ok) return alert(r.data && r.data.message ? r.data.message : 'فشل في تحديث العضو');
+    location.reload();
+  } catch (err) {
+    console.error(err);
+    alert('خطأ في الشبكة');
+  }
+}
+
+// Upload Excel file and POST to import endpoint
+async function uploadMembers(e){
+  e.preventDefault();
+  const input = document.getElementById('membersFile');
+  if(!input || !input.files || !input.files[0]) return alert('اختر ملف Excel للاستيراد');
+  const fd = new FormData();
+  fd.append('file', input.files[0]);
+  try{
+    // include chosen import mode
+    const modeSel = document.getElementById('importMode');
+    if(modeSel && modeSel.value) fd.append('mode', modeSel.value);
+    const resp = await fetch('/api/uploads/members-import', { method: 'POST', body: fd, credentials: 'same-origin' });
+    const data = await resp.json().catch(()=>({}));
+    if(!resp.ok) return alert(data && data.message ? data.message : 'فشل الاستيراد');
+    alert(`تم الاستيراد. ${data.results ? ((data.results.created || 0) + ' إنشاء، ' + (data.results.updated || 0) + ' تحديث، ' + data.results.failed + ' فشل') : ''}`);
+    location.reload();
+  }catch(err){
+    console.error('Import error', err);
+    alert('حدث خطأ أثناء الاستيراد');
+  }
+}
+
+// Show member detail in a full-card modal
+async function showMemberDetail(id){
+  try{
+    const r = await safeFetchJson('/api/members/' + id, { credentials: 'same-origin' });
+    if(!r.ok) return alert(r.data && r.data.message ? r.data.message : 'فشل في جلب بيانات العضو');
+    const m = r.data;
+    const body = document.getElementById('detailModalBody');
+    if(!body) return;
+    const html = `
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;gap:12px;align-items:center">
+          <h2 style="margin:0">${m.fullName || '-'} <span class="small" style="margin-left:8px">#${m.membershipId || ''}</span></h2>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div><strong>الهاتف</strong><div class="small">${m.phone || '-'}</div></div>
+          <div><strong>البريد الإلكتروني</strong><div class="small">${m.email || '-'}</div></div>
+          <div><strong>العنوان</strong><div class="small">${m.address || '-'}</div></div>
+          <div><strong>تاريخ الميلاد</strong><div class="small">${m.dateOfBirth ? new Date(m.dateOfBirth).toISOString().slice(0,10) : '-'}</div></div>
+          <div><strong>النوع</strong><div class="small">${m.gender === 'M' ? 'ذكر' : m.gender === 'F' ? 'أنثى' : '-'}</div></div>
+          <div><strong>المستوى الدراسي</strong><div class="small">${(m.educationLevel || 'other')}</div></div>
+          <div><strong>المهنة</strong><div class="small">${(m.occupation || 'other')}</div></div>
+          <div><strong>المهمة</strong><div class="small">${m.role || '-'}</div></div>
+          <div><strong>نوع العضوية</strong><div class="small">${m.memberType || '-'}</div></div>
+          <div><strong>عضوية هيئات مجالية</strong><div class="small">${m.memberOfRegionalBodies ? 'نعم' : 'لا'}</div></div>
+          <div><strong>مكان العضوية</strong><div class="small">${m.memberOfRegionalBodiesDetail || '-'}</div></div>
+          <div><strong>مهمة انتدابية</strong><div class="small">${m.assignedMission ? 'نعم' : 'لا'}</div></div>
+          <div><strong>تفاصيل المهمة</strong><div class="small">${m.assignedMissionDetail || '-'}</div></div>
+          <div style="grid-column:1 / -1"><strong>تجارب حزبية سابقة</strong><div class="small">${m.previousPartyExperiences || '-'}</div></div>
+          <div style="grid-column:1 / -1"><strong>السيرة / ملاحظات</strong><div class="small">${m.bio || '-'}</div></div>
+          <div><strong>الملف (PDF)</strong><div class="small">${m.pdfUrl ? `<a class="pdf-link" href="${m.pdfUrl}" target="_blank">عرض PDF</a>` : '-'}</div></div>
+          <div><strong>الحالة</strong><div class="small">${m.status || '-'}</div></div>
+          <div><strong>انضم في</strong><div class="small">${m.joinedAt ? new Date(m.joinedAt).toISOString().slice(0,10) : '-'}</div></div>
+        </div>
+      </div>
+    `;
+    body.innerHTML = html;
+    openModal('detailModal');
+  }catch(err){
+    console.error(err);
+    alert('خطأ في جلب بيانات العضو');
+  }
+}
+</script>
+
+<%- include('partials/footer') %>

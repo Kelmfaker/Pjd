@@ -1,0 +1,21 @@
+<%--
+  Card partial helper.
+  Usage:
+    Open a card:   <%- include('partials/card', { title: 'My Title' }) %>
+    ... content ...
+    Close a card:  <%- include('partials/card', { close: true }) %>
+
+  When included without `close: true`, it renders the dashboard/container/card start
+  and prints the provided `title` as the page title. When included with `close: true`
+  it closes the previously opened tags.
+--%>
+<% if (close) { %>
+  </div>
+    </div>
+  </div>
+<% } else { %>
+  <div class="dashboard">
+    <div class="container">
+      <div class="page-title"><h1><%= title || '' %></h1></div>
+      <div class="card">
+<% } %>

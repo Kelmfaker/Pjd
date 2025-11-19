@@ -1,0 +1,101 @@
+<style>
+  /* Simple accessible modal */
+  .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:9999 }
+  .modal-overlay.active { display:flex; }
+  /* make modal vertically constrained and allow the body to scroll independently
+    so large forms fit on smaller screens without pushing content off-screen */
+  .modal-content { background:white; padding:18px; border-radius:8px; width:90%; max-width:720px; box-shadow:0 6px 24px rgba(0,0,0,0.2); direction:rtl; display:flex; flex-direction:column; max-height:90vh; overflow:hidden }
+  .modal-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex:0 0 auto }
+  .modal-body { overflow:auto; padding:6px 0; flex:1 1 auto }
+  .modal-close { background:transparent;border:none;font-size:18px;cursor:pointer }
+  .modal-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:12px; flex:0 0 auto }
+</style>
+
+<!-- Add/Edit Modal wrapper examples: pages will include forms inside these containers -->
+<div id="addModal" class="modal-overlay" role="dialog" aria-hidden="true">
+  <div class="modal-content" role="document">
+  <div class="modal-header"><h3 id="addModalTitle">إضافة</h3><button class="modal-close" aria-label="إغلاق" onclick="closeModal('addModal')">×</button></div>
+  <div id="addModalBody" class="modal-body"></div>
+  </div>
+</div>
+
+<div id="editModal" class="modal-overlay" role="dialog" aria-hidden="true">
+  <div class="modal-content" role="document">
+  <div class="modal-header"><h3 id="editModalTitle">تعديل</h3><button class="modal-close" aria-label="إغلاق" onclick="closeModal('editModal')">×</button></div>
+  <div id="editModalBody" class="modal-body"></div>
+  </div>
+</div>
+
+<!-- Confirm modal -->
+<div id="confirmModal" class="modal-overlay" role="dialog" aria-hidden="true">
+  <div class="modal-content" role="document">
+    <div class="modal-header"><h3>تأكيد</h3><button class="modal-close" aria-label="إغلاق" onclick="closeModal('confirmModal')">×</button></div>
+  <div id="confirmModalBody" class="modal-body">هل أنت متأكد؟</div>
+    <div class="modal-actions">
+      <button id="confirmCancel" onclick="_confirmCancel()" style="background:#ccc;color:#000;border:none;padding:8px;border-radius:6px">إلغاء</button>
+      <button id="confirmOk" onclick="_confirmOk()" style="background:#e74c3c;color:#fff;border:none;padding:8px;border-radius:6px">نعم، نفّذ</button>
+    </div>
+  </div>
+</div>
+
+<!-- Detail modal -->
+<div id="detailModal" class="modal-overlay" role="dialog" aria-hidden="true">
+  <div class="modal-content" role="document">
+  <div class="modal-header"><h3 id="detailModalTitle">معلومات العضو</h3><button class="modal-close" aria-label="إغلاق" onclick="closeModal('detailModal')">×</button></div>
+  <div id="detailModalBody" class="modal-body"></div>
+  </div>
+</div>
+
+<script>
+  function openModal(id){
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.classList.add('active');
+    el.setAttribute('aria-hidden','false');
+    // focus first focusable element
+    setTimeout(()=>{
+      const focusable = el.querySelector('input,button,select,textarea,a[href]');
+      if(focusable) focusable.focus();
+    },50);
+  }
+  function closeModal(id){
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.classList.remove('active');
+    el.setAttribute('aria-hidden','true');
+  }
+
+  // Confirm modal helper
+  window._confirmCallback = null;
+  function showConfirm(message, onConfirm){
+    const body = document.getElementById('confirmModalBody');
+    body.textContent = message || 'هل تريد المتابعة؟';
+    window._confirmCallback = onConfirm || null;
+    openModal('confirmModal');
+  }
+  function _confirmOk(){
+    closeModal('confirmModal');
+    if(typeof window._confirmCallback === 'function'){
+      try{ window._confirmCallback(); } catch(e){ console.error(e); }
+    }
+    window._confirmCallback = null;
+  }
+  function _confirmCancel(){
+    closeModal('confirmModal');
+    window._confirmCallback = null;
+  }
+
+  // Close modal on Escape
+  document.addEventListener('keydown', (e)=>{
+    if(e.key === 'Escape'){
+      document.querySelectorAll('.modal-overlay.active').forEach(m => closeModal(m.id));
+    }
+  });
+
+  // Close when clicking overlay (but not modal content)
+  document.addEventListener('click', (e)=>{
+    if(e.target && e.target.classList && e.target.classList.contains('modal-overlay')){
+      closeModal(e.target.id);
+    }
+  });
+</script>

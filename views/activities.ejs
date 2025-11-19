@@ -1,0 +1,240 @@
+<%- include('partials/head', { title: 'لوحة التحكم' }) %>
+<%- include('partials/header') %>
+
+  <%- include('partials/card-open', { title: 'إدارة الأنشطة' }) %>
+    <% if (user && (user.role === 'admin' || user.role === 'secretary' || user.role === 'responsible')) { %>
+      <button class="btn btn-add" onclick="openActivityAdd()">إضافة نشاط جديد</button>
+    <% } else { %>
+      <button class="btn btn-add" data-require-role="admin,secretary,responsible">إضافة نشاط جديد</button>
+    <% } %>
+    <table>
+      <thead>
+        <tr>
+          <th>العنوان</th>
+          <th>الوصف</th>
+          <th>المكان</th>
+          <th>التاريخ</th>
+          <th>المكلفون</th>
+          <th>الحالة</th>
+          <th>إجراءات</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% activities.forEach(activity => { %>
+          <tr>
+            <td><%= activity.title %></td>
+            <td><%= activity.description || "-" %></td>
+            <td><%= activity.location || "-" %></td>
+            <td><%= new Date(activity.date).toLocaleString('ar-MA') %></td>
+            <td><%= activity.responsible.map(r => r.fullName).join(", ") %></td>
+            <td><%= activity.status %></td>
+            <td>
+              <% if (user && (user.role === 'admin' || user.role === 'secretary' || user.role === 'responsible')) { %>
+                <button class="btn btn-edit" onclick="editActivity('<%= activity._id %>')">تعديل</button>
+                <a class="btn" href="/activities/<%= activity._id %>/attendance" style="background:#0069d9;margin-left:6px">قائمة الحضور</a>
+              <% } else { %>
+                <button class="btn btn-edit" data-require-role="admin,secretary,responsible">تعديل</button>
+                <button class="btn" data-require-role="admin,secretary,responsible" style="background:#0069d9;margin-left:6px">قائمة الحضور</button>
+              <% } %>
+              <% if (user && (user.role === 'admin' || user.role === 'secretary')) { %>
+                <button class="btn btn-delete" onclick="deleteActivity('<%= activity._id %>')">حذف</button>
+                <button class="btn btn-qr" style="background:#28a745;margin-left:6px" data-id="<%= activity._id %>" data-title="<%= (activity.title || '').replace(/"/g,'&quot;') %>">عرض / طباعة QR</button>
+                <a class="btn" href="/activities/<%= activity._id %>/attendance?pdf=1" style="background:#444;margin-left:6px">تصدير PDF</a>
+              <% } else { %>
+                <button class="btn btn-delete" data-require-role="admin,secretary">حذف</button>
+                <button class="btn" data-require-role="admin,secretary" style="background:#28a745;margin-left:6px">عرض / طباعة QR</button>
+                <button class="btn" data-require-role="admin,secretary" style="background:#444;margin-left:6px">تصدير PDF</button>
+              <% } %>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+
+  <% /* templates holder - will move forms into modal */ %>
+  <div id="formTemplates" style="display:none">
+      <form id="addForm" onsubmit="addActivity(event)">
+      <h3>إضافة نشاط جديد</h3>
+      <input type="text" name="title" placeholder="عنوان النشاط" required>
+      <textarea name="description" placeholder="وصف النشاط"></textarea>
+      <input type="text" name="location" placeholder="المكان">
+      <input type="datetime-local" name="date" required>
+      <select name="status">
+        <option value="scheduled">مبرمج</option>
+        <option value="done">منجز</option>
+        <option value="postponed">مؤجل</option>
+      </select>
+      <label>نوع النشاط</label>
+      <select name="kind">
+        <option value="meeting">اجتماع</option>
+        <option value="course">دورة</option>
+        <option value="campaign">حملة</option>
+        <option value="other">أخرى</option>
+      </select>
+      <label>المكلفون (أعضاء المكتب):</label>
+      <select name="responsible" multiple required>
+        <% bureauMembers.forEach(member => { %>
+          <option value="<%= member._id %>"><%= member.fullName %></option>
+        <% }) %>
+      </select>
+      <button type="submit">إضافة النشاط</button>
+      </form>
+
+      <!-- Edit form for activities -->
+      <form id="editForm" onsubmit="updateActivity(event)">
+        <h3>تعديل النشاط</h3>
+        <input type="hidden" name="_id" />
+        <input type="text" name="title" placeholder="عنوان النشاط" required>
+        <textarea name="description" placeholder="وصف النشاط"></textarea>
+        <input type="text" name="location" placeholder="المكان">
+        <input type="datetime-local" name="date" required>
+        <select name="status">
+          <option value="scheduled">مبرمج</option>
+          <option value="done">منجز</option>
+          <option value="postponed">مؤجل</option>
+        </select>
+        <label>نوع النشاط</label>
+        <select name="kind">
+          <option value="meeting">اجتماع</option>
+          <option value="course">دورة</option>
+          <option value="campaign">حملة</option>
+          <option value="other">أخرى</option>
+        </select>
+        <label>المكلفون (أعضاء المكتب):</label>
+        <select name="responsible" multiple required>
+          <% bureauMembers.forEach(member => { %>
+            <option value="<%= member._id %>"><%= member.fullName %></option>
+          <% }) %>
+        </select>
+        <div style="display:flex;gap:8px">
+          <button type="submit">حفظ التعديلات</button>
+          <button type="button" onclick="closeActivityEdit()" style="background:#ccc;color:#000;border:none;padding:10px;border-radius:4px">إلغاء</button>
+        </div>
+      </form>
+    </div>
+
+  <%- include('partials/modal') %>
+
+    <!-- forms moved into templates above and will be shown in modal -->
+
+  <%- include('partials/card-close') %>
+
+<script>
+function openActivityAdd(){
+  const form = document.getElementById('addForm');
+  if(!form) return alert('نموذج غير موجود');
+  document.getElementById('addModalTitle').textContent = 'إضافة نشاط جديد';
+  document.getElementById('addModalBody').appendChild(form);
+  openModal('addModal');
+}
+function closeActivityEdit(){
+  const holder = document.getElementById('formTemplates');
+  const form = document.getElementById('editForm');
+  if(form && holder) holder.appendChild(form);
+  closeModal('editModal');
+}
+
+async function addActivity(e){
+  e.preventDefault();
+  const form = e.target;
+  const formData = new FormData(form);
+  const responsible = Array.from(formData.getAll("responsible"));
+  const data = {
+    title: formData.get("title"),
+    description: formData.get("description"),
+    location: formData.get("location"),
+    date: formData.get("date"),
+    status: formData.get("status"),
+    kind: formData.get("kind"),
+    responsible
+  };
+  const r = await safeFetchJson('/api/activities', { method:'POST', credentials: 'same-origin', headers: { 'Content-Type':'application/json' }, body: JSON.stringify(data) });
+  if(r.ok) return location.reload();
+  alert(r.data && r.data.message ? r.data.message : 'حدث خطأ عند إضافة النشاط');
+}
+
+async function deleteActivity(id){
+  showConfirm('هل تريد حذف هذا النشاط؟', async ()=>{
+    const r = await safeFetchJson('/api/activities/' + id, { method:'DELETE', credentials: 'same-origin' });
+    if(r.ok) location.reload();
+    else alert(r.data && r.data.message ? r.data.message : 'حدث خطأ عند الحذف');
+  });
+}
+
+function editActivity(id){
+  (async ()=>{
+    try{
+      const r = await safeFetchJson('/api/activities/' + id, { credentials: 'same-origin' });
+      if(!r.ok){ alert(r.data && r.data.message ? r.data.message : 'فشل في جلب بيانات النشاط'); return; }
+      const activity = r.data;
+      const form = document.getElementById('editForm');
+      form.querySelector('input[name="_id"]').value = activity._id;
+      form.querySelector('input[name="title"]').value = activity.title || '';
+      form.querySelector('textarea[name="description"]').value = activity.description || '';
+      form.querySelector('input[name="location"]').value = activity.location || '';
+      if(activity.date){
+        const d = new Date(activity.date);
+        const iso = new Date(d.getTime() - (d.getTimezoneOffset()*60000)).toISOString().slice(0,16);
+        form.querySelector('input[name="date"]').value = iso;
+      }
+      form.querySelector('select[name="status"]').value = activity.status || 'scheduled';
+      form.querySelector('select[name="kind"]').value = activity.kind || 'other';
+      const sel = form.querySelector('select[name="responsible"]');
+      Array.from(sel.options).forEach(opt=> opt.selected = (activity.responsible || []).some(r => String(r._id || r) === String(opt.value)));
+      document.getElementById('editModalTitle').textContent = 'تعديل النشاط';
+      document.getElementById('editModalBody').appendChild(form);
+      openModal('editModal');
+    }catch(err){ console.error(err); alert('خطأ في الشبكة'); }
+  })();
+}
+
+async function updateActivity(e){
+  e.preventDefault();
+  const form = e.target;
+  const formData = new FormData(form);
+  const id = formData.get('_id');
+  const responsible = Array.from(formData.getAll('responsible'));
+  const data = {
+    title: formData.get('title'),
+    description: formData.get('description'),
+    location: formData.get('location'),
+    date: formData.get('date'),
+    status: formData.get('status'),
+    kind: formData.get('kind'),
+    responsible
+  };
+  try{
+    const r = await safeFetchJson('/api/activities/' + id, { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type':'application/json' }, body: JSON.stringify(data) });
+    if(!r.ok){ alert(r.data && r.data.message ? r.data.message : 'فشل في تحديث النشاط'); return; }
+    location.reload();
+  }catch(err){ console.error(err); alert('خطأ في الشبكة'); }
+}
+
+// Regenerate QR token and open printable window
+async function generateQr(id, title){
+  if(!confirm('هل تريد إنشاء/تجديد رمز QR لهذا النشاط؟')) return;
+  try{
+    const r = await safeFetchJson('/api/activities/' + id + '/qr-regenerate', { method: 'POST', credentials: 'same-origin' });
+    if(!r.ok){ alert(r.data && r.data.message ? r.data.message : 'خطأ في إنشاء رمز QR'); return; }
+    const data = r.data;
+    const token = data.token;
+    const printableUrl = data.printableUrl || (`/?activity=${id}&token=${token}`);
+    const w = window.open('', '_blank', 'width=600,height=400');
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>طباعة QR</title>
+      <style>body{font-family:Arial;text-align:center;padding:20px} .card{border:1px solid #ddd;padding:16px;border-radius:8px;display:inline-block}</style>
+      </head><body><div class="card"><h2>${(title || '').replace(/</g,'&lt;')}</h2><p>رمز: <strong>${token}</strong></p>
+      <p>رابط الطباعة/التحقق:</p><p><a href="${printableUrl}" target="_blank">${printableUrl}</a></p>
+      <p><button onclick="window.print()">طباعة</button></p></div></body></html>`;
+    w.document.open(); w.document.write(html); w.document.close();
+  } catch(err){ console.error(err); alert(err.message || 'خطأ في الشبكة'); }
+}
+
+// attach listeners to QR buttons
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.btn-qr').forEach(btn => {
+    btn.addEventListener('click', () => generateQr(btn.dataset.id, btn.dataset.title));
+  });
+});
+</script>
+
+<%- include('partials/footer') %>

@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <title><%= title %></title>
+  <style>
+    body { font-family: Arial; direction: rtl; margin:0; padding:0; background:#f5f5f5; }
+    header { background:#004aad; color:white; padding:20px; text-align:center; }
+    nav { background:#ff6600; padding:10px; }
+    nav a { color:white; margin:0 10px; text-decoration:none; font-weight:bold; }
+    nav a:hover { text-decoration:underline; }
+    main { padding:20px; }
+    .container { max-width:1200px; margin:auto; }
+  </style>
+</head>
+<body>
+  <%-- Layout: render body directly. Individual views include header/footer to avoid duplicate includes. --%>
+    <%- body %>
+
+  <%-- footer partial will close main/container and include scripts --%>
+  <%- include('partials/footer') %>
+</body>
+</html>

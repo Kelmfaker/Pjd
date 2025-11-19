@@ -1,0 +1,190 @@
+  <style>
+    .topbar { background: linear-gradient(90deg,#0b71ff,#004aad); color:#fff; padding:12px 0 }
+    .topbar .inner { display:flex; align-items:center; justify-content:space-between; gap:12px }
+    .brand { display:flex; align-items:center; gap:12px }
+    .avatar { width:44px; height:44px; border-radius:50%; background:#fff3; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700 }
+    .greeting { font-size:15px; }
+    nav.main-nav { background:#0b71ff; padding:8px 0 }
+    nav.main-nav .container { display:flex; gap:10px; align-items:center }
+    nav.main-nav a { color:white; text-decoration:none; font-weight:600; padding:6px 10px; border-radius:6px }
+    nav.main-nav a:hover { background:rgba(255,255,255,0.08) }
+    .btn-ghost { background:transparent; border:1px solid rgba(255,255,255,0.18); color:white; padding:6px 10px; border-radius:6px; cursor:pointer }
+    .role-badge { background: rgba(255,255,255,0.12); padding:4px 8px; border-radius:6px; font-size:12px; color:#fff; margin-top:4px }
+    .quick-actions { display:flex; gap:8px; align-items:center }
+    .quick-actions button { background:rgba(255,255,255,0.08); color:#fff; border:none; padding:6px 10px; border-radius:6px; cursor:pointer }
+  </style>
+
+  <div class="topbar">
+    <div class="container inner">
+      <% const role = (user && user.role) ? String(user.role).toLowerCase() : ''; %>
+      <div class="brand">
+        <!-- Logo: place your image at public/images/logo.png and it will be served at /static/images/logo.png -->
+        <div style="display:flex;align-items:center;margin-right:8px;background-color:#fff;border:1px solid #fff;padding:8px;border-radius: 20px;">
+          <img src="../../public/images/logo.png" alt="logo" style="height:48px;display:block" onerror="this.onerror=null;this.src='/static/images/logo.png'" />
+        </div>
+        <div class="avatar">
+          <% if (user && (user.name || user.username)) { %>
+            <%= (user.name || user.username).split(' ').map(s=>s[0]).slice(0,2).join('').toUpperCase() %>
+          <% } else { %>؟<% } %>
+        </div>
+        <div>
+          <div class="greeting">
+            <% if (user) { %>
+              مرحبا، <strong><%= user.name || user.username %></strong>
+            <% } else { %>
+              مرحبا بكم
+            <% } %>
+          </div>
+          <% if (user && user.role) { %>
+            <div style="font-size:12px; opacity:0.9"><%= user.role %></div>
+          <% } %>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:12px">
+        <% if (user && user.role) { %>
+          <div class="quick-actions">
+            <% if (role === 'admin') { %>
+              <button onclick="location.href='/members'">أعضاء</button>
+              <button onclick="location.href='/activities'">أنشطة</button>
+              <button onclick="location.href='/attendance'">حضور</button>
+              <!-- Admin quick dropdown -->
+              <div style="position:relative;display:inline-block">
+                <button id="adminDropdownBtn" style="background:rgba(255,255,255,0.06);color:#fff;border:none;padding:6px 10px;border-radius:6px;cursor:pointer">لوحة المدير ▾</button>
+                <div id="adminDropdown" style="display:none;position:absolute;right:0;top:36px;background:#fff;color:#000;padding:8px;border-radius:6px;box-shadow:0 6px 18px rgba(0,0,0,0.12);min-width:200px;z-index:50">
+                  <div style="display:flex;flex-direction:column;gap:6px">
+                    <button onclick="location.href='/'" style="text-align:right;padding:6px;border:none;background:transparent;cursor:pointer;color:#2d7bf6">لوحة التحكم</button>
+                    <button onclick="location.href='/members'" style="text-align:right;padding:6px;border:none;background:transparent;cursor:pointer;color:#2d7bf6">إدارة الأعضاء</button>
+                    <button onclick="location.href='/activities'" style="text-align:right;padding:6px;border:none;background:transparent;cursor:pointer;color:#2d7bf6">إدارة الأنشطة</button>
+                    <button onclick="location.href='/users'" style="text-align:right;padding:6px;border:none;background:transparent;cursor:pointer;color:#2d7bf6">إدارة المسؤولين</button>
+                    <hr style="margin:6px 0;border:none;border-top:1px solid #eee" />
+                    <button id="regenAllQrBtn" style="text-align:right;padding:6px;border:none;background:transparent;cursor:pointer;color:#28a745">تجديد جميع رموز QR</button>
+                    <button id="clearAttendanceBtn" style="text-align:right;padding:6px;border:none;background:transparent;cursor:pointer;color:#e67e22">مسح الحضور</button>
+                    <button id="exportDataBtn" style="text-align:right;padding:6px;border:none;background:transparent;cursor:pointer;color:#2d7bf6">تصدير البيانات (JSON)</button>
+                  </div>
+                </div>
+              </div>
+            <% } else if (role === 'secretary') { %>
+              <button onclick="location.href='/attendance'">تسجيل حضور</button>
+              <button onclick="location.href='/activities'">أنشطة</button>
+            <% } else if (role === 'responsible') { %>
+              <button onclick="location.href='/activities'">مهامّي</button>
+              <button onclick="location.href='/attendance/qr'">QR تسجيل</button>
+            <% } else if (role === 'viewer') { %>
+              <button onclick="location.href='/members'">عرض الأعضاء</button>
+            <% } %>
+          </div>
+        <% } %>
+        <% /* removed duplicate admin-actions block to avoid showing links twice (quick-actions + main nav remain) */ %>
+        <% if (!user) { %>
+          <a class="btn-ghost" href="/login">تسجيل الدخول</a>
+        <% } else { %>
+          <div style="display:flex;flex-direction:column;align-items:flex-end">
+            <% if (user && user.role) { %>
+              <div class="role-badge"><%= (user.role || '').toUpperCase() %></div>
+            <% } %>
+            <button id="logoutBtnHeader" class="btn-ghost">تسجيل الخروج</button>
+          </div>
+        <% } %>
+      </div>
+    </div>
+  </div>
+
+  <main>
+    <div class="container">
+      <script>
+        // header logout handler (sends POST /api/auth/logout and clears client token)
+        document.addEventListener('click', async (e) => {
+          if (e.target && e.target.id === 'logoutBtnHeader') {
+            try {
+              // clear localStorage first
+              localStorage.removeItem('token');
+              await safeFetchJson('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+            } catch (err) {
+              console.error('Logout failed', err);
+            }
+            window.location.href = '/login';
+          }
+        });
+      </script>
+      <script>
+        // Admin dropdown actions
+        document.addEventListener('DOMContentLoaded', () => {
+          const btn = document.getElementById('adminDropdownBtn');
+          const menu = document.getElementById('adminDropdown');
+          if (btn && menu) {
+            btn.addEventListener('click', (e) => { e.stopPropagation(); menu.style.display = (menu.style.display === 'none' ? 'block' : 'none'); });
+            // close when clicking outside
+            document.addEventListener('click', () => { menu.style.display = 'none'; });
+          }
+
+          const regenBtn = document.getElementById('regenAllQrBtn');
+          if (regenBtn) regenBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (typeof showConfirm === 'function') {
+              showConfirm('هل تريد تجديد جميع رموز QR؟', async ()=>{ await doRegenAll(); });
+            } else {
+              if (confirm('هل تريد تجديد جميع رموز QR؟')) await doRegenAll();
+            }
+          });
+
+          const clearBtn = document.getElementById('clearAttendanceBtn');
+          if (clearBtn) clearBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const cb = async ()=>{ await doClearAttendance(); };
+            if (typeof showConfirm === 'function') showConfirm('هل تريد مسح جميع سجلات الحضور؟ هذا الإجراء لا يمكن التراجع عنه.', cb);
+            else if (confirm('هل تريد مسح جميع سجلات الحضور؟ هذا الإجراء لا يمكن التراجع عنه.')) await doClearAttendance();
+          });
+
+          const expBtn = document.getElementById('exportDataBtn');
+          if (expBtn) expBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            try {
+              const r = await safeFetchJson('/admin/export', { method: 'GET', credentials: 'same-origin' });
+              if (!r.ok) return alert(r.data && r.data.message ? r.data.message : 'فشل في التصدير');
+              const payload = JSON.stringify(r.data, null, 2);
+              const blob = new Blob([payload], { type: 'application/json' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a'); a.href = url; a.download = 'export.json'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+            } catch (err) { console.error(err); alert('خطأ في التصدير'); }
+          });
+        });
+
+        async function doRegenAll(){
+          try {
+            const r = await safeFetchJson('/admin/regenerate-all-qr', { method: 'POST', credentials: 'same-origin' });
+            if (!r.ok) return alert(r.data && r.data.message ? r.data.message : 'فشل في تجديد الرموز');
+            alert('تم تجديد رموز QR لجميع الأنشطة');
+          } catch (err) { console.error(err); alert('خطأ في الشبكة'); }
+        }
+
+        async function doClearAttendance(){
+          try {
+            const r = await safeFetchJson('/admin/clear-attendance', { method: 'POST', credentials: 'same-origin' });
+            if (!r.ok) return alert(r.data && r.data.message ? r.data.message : 'فشل في مسح الحضور');
+            alert('تم مسح سجلات الحضور');
+          } catch (err) { console.error(err); alert('خطأ في الشبكة'); }
+        }
+      </script>
+      <script>
+        // Defense-in-depth: disable elements the user is not permitted to use.
+        (function(){
+          const userRole = "<%= user && user.role ? String(user.role).toLowerCase() : '' %>";
+          document.addEventListener('DOMContentLoaded', () => {
+            document.querySelectorAll('[data-require-role]').forEach(el => {
+              const required = (el.getAttribute('data-require-role') || '').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+              if (!userRole || required.length === 0 || !required.includes(userRole)) {
+                el.classList.add('disabled');
+                el.setAttribute('aria-disabled','true');
+                // disable links
+                if (el.tagName.toLowerCase() === 'a') {
+                  el.dataset.hrefBackup = el.getAttribute('href') || '';
+                  el.removeAttribute('href');
+                }
+                // prevent clicks
+                el.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); });
+              }
+            });
+          });
+        })();
+      </script>

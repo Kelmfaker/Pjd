@@ -1,0 +1,52 @@
+.vercel
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editors/IDE
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Build / coverage
+dist/
+build/
+coverage/
+.nyc_output/
+
+# Vercel
+.vercel/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Misc
+uploads/
+.cache/
+.parcel-cache/
+
+# Optional: local serverless / caches
+.serverless/
+.turbo/

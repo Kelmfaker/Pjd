@@ -1,0 +1,91 @@
+<%- include('../partials/head', { title: 'إدارة Hundel' }) %>
+<%- include('../partials/header') %>
+
+  <style>
+    .table { width:100%; border-collapse: collapse; }
+    .table th, .table td { padding:8px 12px; border-bottom:1px solid #e6e6e6; }
+    .actions button { margin-left:8px }
+    .topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px }
+  </style>
+
+      <div class="dashboard">
+        <div class="container">
+          <div class="page-title"><h1>قائمة Hundel</h1></div>
+          <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+              <div></div>
+              <div>
+                <% if (user && user.role === 'admin') { %>
+                  <a href="/hundels/new"><button>إنشاء جديد</button></a>
+                <% } else { %>
+                  <button data-require-role="admin">إنشاء جديد</button>
+                <% } %>
+              </div>
+            </div>
+
+            <div id="msg" style="color:#c00;margin-bottom:8px"></div>
+
+            <table class="table" id="list">
+              <thead>
+                <tr><th>الاسم</th><th>الوصف</th><th>الحالة</th><th>إنشئ في</th><th>الإجراءات</th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+  <%- include('../partials/card-close') %>
+
+  <script>
+    const msg = document.getElementById('msg');
+    const userRole = "<%= user && user.role ? user.role : '' %>";
+    const tbody = document.querySelector('#list tbody');
+  // use cookie-based auth; UI routes are protected server-side
+
+    async function load() {
+      try {
+  const r = await safeFetchJson('/api/hundels', { credentials: 'same-origin' });
+        if (!r.ok) {
+          if (r.status === 401) { localStorage.removeItem('token'); location.href = '/login'; return; }
+          msg.textContent = 'فشل تحميل القائمة';
+          return;
+        }
+        const list = r.data || [];
+        tbody.innerHTML = '';
+        for (const item of list) {
+          const tr = document.createElement('tr');
+            const canEdit = (userRole === 'admin');
+            const canDelete = (userRole === 'admin');
+            const actions = [];
+            if (canEdit) actions.push(`<a href="/hundels/${item._id}/edit"><button>تعديل</button></a>`);
+            else actions.push(`<button data-require-role="admin">تعديل</button>`);
+            if (canDelete) actions.push(`<button data-id="${item._id}" class="del">حذف</button>`);
+            else actions.push(`<button data-require-role="admin">حذف</button>`);
+            tr.innerHTML = `<td>${item.name}</td><td>${(item.description||'')}</td><td>${item.status}</td><td>${new Date(item.createdAt).toLocaleString()}</td><td class="actions">${actions.join('')}</td>`;
+          tbody.appendChild(tr);
+        }
+        attachDelete();
+      } catch (err) {
+        console.error(err);
+        msg.textContent = 'خطأ بالشبكة';
+      }
+    }
+
+    function attachDelete() {
+      document.querySelectorAll('.del').forEach(btn => btn.addEventListener('click', async (e) => {
+        const id = e.currentTarget.dataset.id;
+        if (!confirm('هل أنت متأكد من الحذف؟')) return;
+          try {
+          const r = await safeFetchJson('/api/hundels/' + id, { method: 'DELETE', credentials: 'same-origin' });
+          if (!r.ok) {
+            msg.textContent = (r.data && r.data.message) ? r.data.message : 'فشل الحذف'; return;
+          }
+          load();
+        } catch (err) { console.error(err); msg.textContent = 'خطأ بالشبكة'; }
+      }));
+    }
+
+    load();
+  </script>
+
+
+<%- include('../partials/footer') %>
+
+
