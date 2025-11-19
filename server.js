@@ -34,6 +34,17 @@ import { connectToDatabase } from './lib/mongoose.js';
 dotenv.config();
 const app = express();
 
+// Diagnostics: capture unexpected errors and exit for clearer logs during dev
+process.on('uncaughtException', (err) => {
+  console.error('uncaughtException:', err && err.stack ? err.stack : err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('unhandledRejection:', reason && reason.stack ? reason.stack : reason);
+});
+process.on('exit', (code) => {
+  console.log('process.exit event, code =', code);
+});
+
 app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));

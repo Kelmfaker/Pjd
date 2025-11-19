@@ -51,10 +51,10 @@
 
       /* member table */
       .member-table { width: 100%; border-collapse: collapse; }
-      .member-table th, .member-table td { padding: 8px 10px; border-bottom: 1px solid #f0f2f5; vertical-align: top; }
-      .member-table th { background:#fbfdff; text-align: left; color:#0b2540 }
-      .member-table tbody tr:hover { background:#fbfbff }
-      .member-table .small { font-size:0.85em; color:#667085 }
+        .member-table th, .member-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+        .member-table th { background:var(--surface); text-align: left; color:var(--text) }
+        .member-table tbody tr:hover { background:#fbfbff }
+        .member-table .small { font-size:0.85em; color:var(--muted) }
 
       /* form layout */
       .member-form { display:block; }
@@ -63,16 +63,16 @@
       .form-label { font-weight:700; font-size:0.95em; color:#102a43 }
 
       /* form controls with subtle colored focus */
-      .form-control { padding:10px 12px; border:1px solid #e6edf3; border-radius:8px; font-size:0.95em; background:#ffffff; color:#0b2540 }
-      .form-control:focus { outline:none; border-color:#0b6efd; box-shadow:0 6px 18px rgba(11,110,253,0.06), 0 0 0 4px rgba(11,110,253,0.08); }
+        .form-control { padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-size:0.95em; background:var(--bg); color:var(--text) }
+        .form-control:focus { outline:none; border-color:var(--accent); box-shadow:0 6px 18px rgba(11,110,253,0.06), 0 0 0 4px rgba(11,110,253,0.08); }
       .form-control[type="file"] { padding:6px }
       .member-form textarea.form-control { min-height:110px; resize:vertical }
 
       /* actions and buttons (colored) */
       .form-actions { display:flex; gap:8px; justify-content:flex-start; margin-top:10px }
       .btn { padding:6px 10px; border-radius:8px; border:1px solid transparent; cursor:pointer; font-size:0.95em }
-      .btn-primary { background:#0b6efd;color:#fff;border-color:#0b6efd }
-      .btn-primary:hover { background:#0958d6; border-color:#0958d6 }
+        .btn-primary { background:var(--accent);color:#fff;border-color:var(--accent) }
+        .btn-primary:hover { background:var(--accent-strong); border-color:var(--accent-strong) }
       .btn-secondary { background:#f1f5f9;color:#0b2540;border-color:#e6edf3 }
       .btn-secondary:hover { background:#edf2ff }
 
@@ -84,11 +84,22 @@
 
       /* status badges */
       .status-badge { display:inline-block; padding:4px 8px; border-radius:999px; font-size:0.85em }
-      .status-badge.active { background:#e6fffa; color:#047857 }
-      .status-badge.inactive { background:#f8fafc; color:#667085 }
+        .status-badge.active { background:var(--badge-active-bg); color:var(--badge-active-fg) }
+        .status-badge.inactive { background:var(--badge-inactive-bg); color:var(--badge-inactive-fg) }
 
       .truncate-ellipsis { max-width:260px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:inline-block; vertical-align:middle }
       .pdf-link { color:#0b6efd; text-decoration:underline }
+
+      /* Detail modal gentle styling */
+      .detail-card { background: linear-gradient(180deg,#ffffff, #fbfcff); border-radius:12px; padding:18px; box-shadow:0 8px 24px rgba(16,38,64,0.06); color:#07263b }
+      .detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:8px }
+      .detail-label { font-weight:700; color:#334e68; margin-bottom:6px }
+        .detail-value { color:var(--text); background:var(--detail-value-bg); padding:8px 10px; border-radius:8px }
+        .detail-badge { display:inline-block; padding:6px 10px; border-radius:999px; font-size:0.9em; color:var(--badge-active-fg) }
+        .badge-active { background: var(--badge-active-bg); color:var(--badge-active-fg) }
+        .badge-inactive { background: var(--badge-inactive-bg); color:var(--badge-inactive-fg) }
+        .badge-gender { background: linear-gradient(90deg,var(--gender-grad-start),var(--gender-grad-end)); color:var(--accent) }
+        .detail-section { background:var(--bg); border-radius:10px; padding:10px }
     </style>
 
     <table class="member-table">
@@ -514,12 +525,24 @@ function doSearch(e){
   if(q && String(q).trim()) p.set('q', String(q).trim());
   else p.delete('q');
   p.set('page','1');
-  location.search = p.toString();
+    
 }
 
 function clearSearch(){
   const p = new URLSearchParams(location.search);
   p.delete('q');
+  p.set('page','1');
+  location.search = p.toString();
+}
+
+function onFilterChange(){
+  const p = new URLSearchParams(location.search);
+  const g = (document.getElementById('filterGender') && document.getElementById('filterGender').value) || '';
+  const ed = (document.getElementById('filterEducation') && document.getElementById('filterEducation').value) || '';
+  const mt = (document.getElementById('filterMemberType') && document.getElementById('filterMemberType').value) || '';
+  if(g) p.set('gender', g); else p.delete('gender');
+  if(ed) p.set('educationLevel', ed); else p.delete('educationLevel');
+  if(mt) p.set('memberType', mt); else p.delete('memberType');
   p.set('page','1');
   location.search = p.toString();
 }
@@ -831,29 +854,34 @@ async function showMemberDetail(id){
     const body = document.getElementById('detailModalBody');
     if(!body) return;
     const html = `
-      <div style="display:flex;flex-direction:column;gap:10px">
-        <div style="display:flex;gap:12px;align-items:center">
-          <h2 style="margin:0">${m.fullName || '-'} <span class="small" style="margin-left:8px">#${m.membershipId || ''}</span></h2>
+      <div class="detail-card">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <h2 style="margin:0">${m.fullName || '-'} <span class="small" style="margin-left:8px">#${m.membershipId || ''}</span></h2>
+            <div style="margin-top:6px;color:#617d98">${m.role ? 'المهمة: ' + m.role : ''}</div>
+          </div>
+          <div style="text-align:right">
+            <div class="detail-badge ${m.status === 'active' ? 'badge-active' : 'badge-inactive'}">${m.status === 'active' ? 'نشط' : 'غير نشط'}</div>
+            <div style="height:6px"></div>
+            <div class="detail-badge badge-gender">${m.gender === 'M' ? 'ذكر' : m.gender === 'F' ? 'أنثى' : '-'}</div>
+          </div>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <div><strong>الهاتف</strong><div class="small">${m.phone || '-'}</div></div>
-          <div><strong>البريد الإلكتروني</strong><div class="small">${m.email || '-'}</div></div>
-          <div><strong>العنوان</strong><div class="small">${m.address || '-'}</div></div>
-          <div><strong>تاريخ الميلاد</strong><div class="small">${m.dateOfBirth ? new Date(m.dateOfBirth).toISOString().slice(0,10) : '-'}</div></div>
-          <div><strong>النوع</strong><div class="small">${m.gender === 'M' ? 'ذكر' : m.gender === 'F' ? 'أنثى' : '-'}</div></div>
-          <div><strong>المستوى الدراسي</strong><div class="small">${(m.educationLevel || 'other')}</div></div>
-          <div><strong>المهنة</strong><div class="small">${(m.occupation || 'other')}</div></div>
-          <div><strong>المهمة</strong><div class="small">${m.role || '-'}</div></div>
-          <div><strong>نوع العضوية</strong><div class="small">${m.memberType || '-'}</div></div>
-          <div><strong>عضوية هيئات مجالية</strong><div class="small">${m.memberOfRegionalBodies ? 'نعم' : 'لا'}</div></div>
-          <div><strong>مكان العضوية</strong><div class="small">${m.memberOfRegionalBodiesDetail || '-'}</div></div>
-          <div><strong>مهمة انتدابية</strong><div class="small">${m.assignedMission ? 'نعم' : 'لا'}</div></div>
-          <div><strong>تفاصيل المهمة</strong><div class="small">${m.assignedMissionDetail || '-'}</div></div>
-          <div style="grid-column:1 / -1"><strong>تجارب حزبية سابقة</strong><div class="small">${m.previousPartyExperiences || '-'}</div></div>
-          <div style="grid-column:1 / -1"><strong>السيرة / ملاحظات</strong><div class="small">${m.bio || '-'}</div></div>
-          <div><strong>الملف (PDF)</strong><div class="small">${m.pdfUrl ? `<a class="pdf-link" href="${m.pdfUrl}" target="_blank">عرض PDF</a>` : '-'}</div></div>
-          <div><strong>الحالة</strong><div class="small">${m.status || '-'}</div></div>
-          <div><strong>انضم في</strong><div class="small">${m.joinedAt ? new Date(m.joinedAt).toISOString().slice(0,10) : '-'}</div></div>
+        <div class="detail-grid" style="margin-top:12px">
+          <div class="detail-section"><div class="detail-label">الهاتف</div><div class="detail-value">${m.phone || '-'}</div></div>
+          <div class="detail-section"><div class="detail-label">البريد الإلكتروني</div><div class="detail-value">${m.email || '-'}</div></div>
+          <div class="detail-section"><div class="detail-label">العنوان</div><div class="detail-value">${m.address || '-'}</div></div>
+          <div class="detail-section"><div class="detail-label">تاريخ الميلاد</div><div class="detail-value">${m.dateOfBirth ? new Date(m.dateOfBirth).toISOString().slice(0,10) : '-'}</div></div>
+          <div class="detail-section"><div class="detail-label">المستوى الدراسي</div><div class="detail-value">${(m.educationLevel || 'other')}</div></div>
+          <div class="detail-section"><div class="detail-label">المهنة</div><div class="detail-value">${(m.occupation || 'other')}</div></div>
+          <div class="detail-section"><div class="detail-label">نوع العضوية</div><div class="detail-value">${m.memberType || '-'}</div></div>
+          <div class="detail-section"><div class="detail-label">انضم في</div><div class="detail-value">${m.joinedAt ? new Date(m.joinedAt).toISOString().slice(0,10) : '-'}</div></div>
+          <div style="grid-column:1 / -1" class="detail-section"><div class="detail-label">تجارب حزبية سابقة</div><div class="detail-value">${m.previousPartyExperiences || '-'}</div></div>
+          <div style="grid-column:1 / -1" class="detail-section"><div class="detail-label">السيرة / ملاحظات</div><div class="detail-value">${m.bio || '-'}</div></div>
+          <div class="detail-section"><div class="detail-label">عضوية هيئات مجالية</div><div class="detail-value">${m.memberOfRegionalBodies ? 'نعم' : 'لا'}</div></div>
+          <div class="detail-section"><div class="detail-label">مكان العضوية</div><div class="detail-value">${m.memberOfRegionalBodiesDetail || '-'}</div></div>
+          <div class="detail-section"><div class="detail-label">مهمة انتدابية</div><div class="detail-value">${m.assignedMission ? 'نعم' : 'لا'}</div></div>
+          <div class="detail-section"><div class="detail-label">تفاصيل المهمة</div><div class="detail-value">${m.assignedMissionDetail || '-'}</div></div>
+          <div class="detail-section"><div class="detail-label">الملف (PDF)</div><div class="detail-value">${m.pdfUrl ? `<a class="pdf-link" href="${m.pdfUrl}" target="_blank">عرض PDF</a>` : '-'}</div></div>
         </div>
       </div>
     `;

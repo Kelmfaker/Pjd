@@ -70,16 +70,29 @@ function normalizeMemberInput(input = {}) {
 // عرض كل الأعضاء
 export const getAllMembers = async (req, res) => {
   try {
-    // Server-side sorting: allow ?sort=<field>&order=asc|desc
-    const allowedSortFields = ['fullName', 'membershipId', 'joinedAt', 'status', 'memberType', 'phone', 'createdAt', '_id'];
-    let sortField = req.query.sort;
-    if (!sortField || !allowedSortFields.includes(sortField)) {
-      sortField = 'fullName';
-    }
+    // Server-side sorting: allow ?sort=field1,field2&order=asc|desc
+    // Allow sorting by gender and educationLevel as well as memberType
+    const allowedSortFields = ['fullName', 'membershipId', 'joinedAt', 'status', 'memberType', 'phone', 'createdAt', '_id', 'gender', 'educationLevel'];
+    let sortParam = req.query.sort;
     const sortOrder = (req.query.order && String(req.query.order).toLowerCase() === 'desc') ? -1 : 1;
-    const sortObj = { [sortField]: sortOrder };
+    let sortObj = {};
+    if (sortParam) {
+      // support comma-separated fields: ?sort=gender,educationLevel
+      const parts = String(sortParam).split(',').map(s => s.trim()).filter(Boolean);
+      for (const p of parts) {
+        if (allowedSortFields.includes(p)) sortObj[p] = sortOrder;
+      }
+    }
+    // default sort if nothing valid provided
+    if (Object.keys(sortObj).length === 0) sortObj = { fullName: 1 };
 
-    const members = await Member.find().sort(sortObj);
+    // Filtering: allow ?gender=M|F, ?educationLevel=bachelor, ?memberType=active
+    const filters = {};
+    if (req.query.gender) filters.gender = req.query.gender;
+    if (req.query.educationLevel) filters.educationLevel = req.query.educationLevel;
+    if (req.query.memberType) filters.memberType = req.query.memberType;
+
+    const members = await Member.find(filters).sort(sortObj);
     res.json(members);
   } catch (err) {
     res.status(500).json({ message: err.message });

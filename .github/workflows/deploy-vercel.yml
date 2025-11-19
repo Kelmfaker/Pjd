@@ -1,0 +1,33 @@
+name: Deploy to Vercel
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    name: Deploy to Vercel
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Deploy to Vercel
+        # Uses the Vercel CLI to deploy. Requires `VERCEL_TOKEN` secret.
+        run: |
+          # Prefer passing scope/project if you have multiple Vercel projects
+          if [ -n "${{ secrets.VERCEL_ORG_ID }}" ] && [ -n "${{ secrets.VERCEL_PROJECT_ID }}" ]; then
+            npx vercel --prod --token "${{ secrets.VERCEL_TOKEN }}" --confirm --scope "${{ secrets.VERCEL_ORG_ID }}" --project "${{ secrets.VERCEL_PROJECT_ID }}"
+          else
+            npx vercel --prod --token "${{ secrets.VERCEL_TOKEN }}" --confirm
+          fi
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
