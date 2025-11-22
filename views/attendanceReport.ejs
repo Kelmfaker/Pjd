@@ -9,51 +9,18 @@
         </div>
 
         <label>اختر النشاط:</label>
-        <select id="activitySelect">
+        <select id="activitySelect" onchange="loadReport()">
           <option value="">-- اختر النشاط --</option>
           <% activities.forEach(a => { %>
             <option value="<%= a._id %>"><%= a.title %> ( <%= new Date(a.date).toLocaleDateString('ar-MA') %> )</option>
           <% }) %>
         </select>
 
-        <div class="filters" style="margin-top:12px">
-          <label>فلتر الأعضاء:</label>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <select id="filterMemberType">
-              <option value="">كل الأنواع</option>
-              <option value="active">عضو عامل</option>
-              <option value="bureau">عضو المكتب</option>
-              <option value="sympathizer">متعاطف</option>
-            </select>
-            <select id="filterGender">
-              <option value="">الجنس (الكل)</option>
-              <option value="M">ذكر</option>
-              <option value="F">أنثى</option>
-            </select>
-            <input id="filterMinAge" type="number" placeholder="الحد الأدنى للعمر" style="width:140px" />
-            <input id="filterMaxAge" type="number" placeholder="الحد الأقصى للعمر" style="width:140px" />
-            <input id="filterResidence" type="text" placeholder="مكان السكن (جزئي)" />
-            <select id="filterStatus">
-              <option value="">الحالة (الكل)</option>
-              <option value="active">نشط</option>
-              <option value="inactive">غير نشط</option>
-            </select>
-            <input id="filterRole" type="text" placeholder="دور (جزئي)" />
-            <button id="generateBtn">توليد التقرير</button>
-          </div>
-        </div>
-
         <table id="reportTable" style="display:none">
           <thead>
             <tr>
               <th>العضو</th>
-              <th>النوع</th>
-              <th>الجنس</th>
-              <th>العمر</th>
-              <th>مكان السكن</th>
               <th>الحضور</th>
-              <th>وقت التسجيل</th>
-              <th>مسجل بواسطة</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -79,9 +46,7 @@ async function loadMonthSummary(){
 }
 loadMonthSummary();
 
-document.getElementById('generateBtn').addEventListener('click', generateReport);
-
-async function generateReport(){
+async function loadReport(){
   const activityId = document.getElementById('activitySelect').value;
   const table = document.getElementById('reportTable');
   const tbody = table.querySelector('tbody');
@@ -89,34 +54,17 @@ async function generateReport(){
   tbody.innerHTML = '';
   rateCell.innerText = '';
 
-  if(!activityId){ alert('الرجاء اختيار النشاط أولاً'); return; }
+  if(!activityId){ table.style.display='none'; return; }
 
-  // Collect filters
-  const params = new URLSearchParams();
-  params.set('activityId', activityId);
-  const mt = document.getElementById('filterMemberType').value; if (mt) params.set('memberType', mt);
-  const g = document.getElementById('filterGender').value; if (g) params.set('gender', g);
-  const minA = document.getElementById('filterMinAge').value; if (minA) params.set('minAge', minA);
-  const maxA = document.getElementById('filterMaxAge').value; if (maxA) params.set('maxAge', maxA);
-  const res = document.getElementById('filterResidence').value; if (res) params.set('residence', res);
-  const st = document.getElementById('filterStatus').value; if (st) params.set('status', st);
-  const rl = document.getElementById('filterRole').value; if (rl) params.set('role', rl);
-
-  // Use POST endpoint but include filters in query string to support existing server logic
-  const url = '/api/export/attendance/reports/generate?' + params.toString();
-  const resp = await safeFetchJson(url, { method: 'POST', credentials: 'same-origin' });
+  const resp = await safeFetchJson('/attendance-report/' + activityId, { credentials: 'same-origin' });
   if (!resp.ok) { alert(resp.data && resp.data.message ? resp.data.message : 'حدث خطأ في تحميل التقرير'); return; }
   const data = resp.data;
-  // server creates one report per activity requested; pick the first result
-  const resObj = Array.isArray(data.results) && data.results.length ? data.results[0] : (data.results || data);
-  const rows = resObj.rows || [];
-  rows.forEach(r => {
+  data.report.forEach(r => {
     const tr = document.createElement('tr');
-    const when = r.recordedAt ? new Date(r.recordedAt).toLocaleString('ar-MA') : '';
-    tr.innerHTML = `<td>${r.fullName || ''}</td><td>${r.memberType || ''}</td><td>${r.gender || ''}</td><td>${r.age || ''}</td><td>${r.address || ''}</td><td>${r.presenceStatus || ''}</td><td>${when}</td><td>${r.recordedBy || ''}</td>`;
+    tr.innerHTML = `<td>${r.fullName}</td><td>${r.presenceStatus}</td>`;
     tbody.appendChild(tr);
   });
-  rateCell.innerText = (resObj.attendanceRate !== undefined ? resObj.attendanceRate : '') + "%";
+  rateCell.innerText = data.attendanceRate + "%";
   table.style.display='table';
 }
 </script>
