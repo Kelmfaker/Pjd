@@ -16,6 +16,11 @@ const attendanceReportSchema = new mongoose.Schema({
     recordedAt: { type: Date },
     recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     comment: { type: String }
+    ,
+    // optional enriched fields when reports are generated with member filters
+    age: { type: Number },
+    address: { type: String },
+    gender: { type: String }
   }]
 }, { timestamps: true });
 
