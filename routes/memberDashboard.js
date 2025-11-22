@@ -6,8 +6,12 @@ const router = express.Router();
 
 // عرض صفحة الأعضاء
 // Allow viewers and responsible users to view the members page (read-only)
-router.get("/", authenticate, authorizeRoles("admin", "secretary", "responsible", "viewer"), async (req, res) => {
+router.get("/", authenticate, authorizeRoles("admin", "secretary", "responsible"), async (req, res) => {
   try {
+    // If the user is a viewer, redirect them to the read-only activities list
+    if (req.user && String(req.user.role).toLowerCase() === 'viewer') {
+      return res.redirect('/activities');
+    }
   // Pagination params
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const pageSize = Math.max(1, Math.min(200, parseInt(req.query.size, 10) || 50)); // default 50, cap 200

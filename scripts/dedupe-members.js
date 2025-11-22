@@ -98,7 +98,8 @@ async function main() {
     // choose keeper: prefer membershipId present, otherwise earliest createdAt
     docs.sort((a,b) => {
       if ((a.membershipId?1:0) !== (b.membershipId?1:0)) return (b.membershipId?1:0) - (a.membershipId?1:0);
-      return new Date(a.createdAt || a.joinedAt || 0) - new Date(b.createdAt || b.joinedAt || 0);
+      // Prefer membershipDate when available (alias), fall back to joinedAt
+      return new Date(a.createdAt || a.membershipDate || a.joinedAt || 0) - new Date(b.createdAt || b.membershipDate || b.joinedAt || 0);
     });
     const keeper = docs[0];
     const others = docs.slice(1);

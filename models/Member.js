@@ -22,7 +22,7 @@ const memberSchema = new mongoose.Schema({
   assignedMissionDetail: { type: String },
   previousPartyExperiences: { type: String },
   status: { type: String, enum: ['active', 'inactive'], default: 'active' },
-  joinedAt: { type: Date, default: Date.now }
+  joinedAt: { type: Date, alias: 'membershipDate' }
 }, { timestamps: true });
 
 // Assign a sequential membershipId on creation

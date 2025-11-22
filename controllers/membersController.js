@@ -1,5 +1,6 @@
 import Member from "../models/Member.js";
 import { logAudit } from '../utils/audit.js';
+import User from "../models/User.js";
 
 // Normalize incoming member fields (map localized labels to canonical enum values)
 function normalizeMemberInput(input = {}) {
@@ -12,9 +13,6 @@ function normalizeMemberInput(input = {}) {
       payload.gender = 'F';
     } else if (g === 'ذكر' || g === 'male' || g === 'm') {
       payload.gender = 'M';
-    } else if (g === 'other' || g === 'غير محدد' || g === 'غير_محدد' || g === 'غير محددة') {
-      // no longer support 'other' — remove the field so it won't fail validation
-      delete payload.gender;
     } else {
       // keep as-is; mongoose will validate and reject invalid enums
       payload.gender = payload.gender;
@@ -64,6 +62,41 @@ function normalizeMemberInput(input = {}) {
     if (payload.assignedMissionDetail && typeof payload.assignedMissionDetail === 'string') payload.assignedMissionDetail = payload.assignedMissionDetail.trim();
     if (payload.previousPartyExperiences && typeof payload.previousPartyExperiences === 'string') payload.previousPartyExperiences = payload.previousPartyExperiences.trim();
 
+    // Accept alternative input key `membershipDate` (preferred human-facing name)
+    // Map it to the schema field `joinedAt` so the rest of the code can query by joinedAt.
+    // Important: do not overwrite/clear existing joinedAt when the incoming field is empty
+    // (e.g. edit form left blank). Only set `joinedAt` when a valid non-empty date is provided.
+    if ('membershipDate' in payload) {
+      const raw = payload.membershipDate;
+      // if user submitted an empty value (""), treat as no-op for updates
+      if (raw === null || (typeof raw === 'string' && raw.trim() === '')) {
+        // remove the membershipDate key so it doesn't overwrite existing value downstream
+        delete payload.membershipDate;
+      } else {
+        try {
+          const str = String(raw).trim();
+          const d = new Date(str);
+          if (!isNaN(d)) {
+            // Prefer storing a date-only value (UTC midnight) when input is yyyy-mm-dd
+            const parts = str.split('-');
+            if (parts.length === 3 && parts[0].length === 4) {
+              const y = Number(parts[0]);
+              const m = Number(parts[1]);
+              const day = Number(parts[2]);
+              if (!Number.isNaN(y) && !Number.isNaN(m) && !Number.isNaN(day)) {
+                payload.joinedAt = new Date(Date.UTC(y, m - 1, day));
+              } else {
+                payload.joinedAt = d;
+              }
+            } else {
+              payload.joinedAt = d;
+            }
+          } else {
+            // invalid date string: do not set joinedAt (leave existing value unchanged)
+          }
+        } catch (e) { /* ignore invalid date */ }
+      }
+    }
   return payload;
 }
 
@@ -114,10 +147,29 @@ export const getMemberById = async (req, res) => {
 export const createMember = async (req, res) => {
   try {
     const data = normalizeMemberInput(req.body);
+    // Require explicit membershipDate / joinedAt on create
+    if (!data.joinedAt) {
+      return res.status(400).json({ message: 'تاريخ العضوية مطلوب عند إضافة عضو' });
+    }
     const member = new Member(data);
     await member.save();
     // audit
     await logAudit(req, 'create', 'Member', member._id, null, member.toObject());
+    // If this member has a role value and there is a linked User, ensure that
+    // linked user's system role is set to 'responsible' so they see role-specific controls.
+    try {
+      if (member.role) {
+        const linkedUser = await User.findOne({ member: member._id });
+        if (linkedUser && (!linkedUser.role || (linkedUser.role !== 'admin' && linkedUser.role !== 'secretary'))) {
+          const beforeU = linkedUser.toObject();
+          linkedUser.role = 'responsible';
+          await linkedUser.save();
+          await logAudit(req, 'update', 'User', linkedUser._id, beforeU, linkedUser.toObject());
+        }
+      }
+    } catch (syncErr) {
+      console.error('Failed to sync member role to linked user', syncErr && (syncErr.stack || syncErr));
+    }
     res.status(201).json(member);
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -132,6 +184,21 @@ export const updateMember = async (req, res) => {
     const member = await Member.findByIdAndUpdate(req.params.id, data, { new: true });
     if (!member) return res.status(404).json({ message: "العضو غير موجود" });
     await logAudit(req, 'update', 'Member', member._id, before, member.toObject());
+    // If this member has a role value and there is a linked User, ensure that
+    // linked user's system role is set to 'responsible' so they see role-specific controls.
+    try {
+      if (member.role) {
+        const linkedUser = await User.findOne({ member: member._id });
+        if (linkedUser && (!linkedUser.role || (linkedUser.role !== 'admin' && linkedUser.role !== 'secretary'))) {
+          const beforeU = linkedUser.toObject();
+          linkedUser.role = 'responsible';
+          await linkedUser.save();
+          await logAudit(req, 'update', 'User', linkedUser._id, beforeU, linkedUser.toObject());
+        }
+      }
+    } catch (syncErr) {
+      console.error('Failed to sync member role to linked user', syncErr && (syncErr.stack || syncErr));
+    }
     res.json(member);
   } catch (err) {
     res.status(400).json({ message: err.message });

@@ -14,7 +14,7 @@ const headers = [
   'email', 'البريد الإلكتروني',
   'address', 'العنوان',
   'dateOfBirth', 'تاريخ الميلاد',
-  'تاريخ الانضمام', 'joinedAt',
+  'تاريخ العضوية', 'joinedAt',
   'gender', 'الجنس',
   'memberType', 'نوع العضوية',
   'role', 'المهمة', 'educationLevel', 'المستوى الدراسي',

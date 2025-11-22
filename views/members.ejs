@@ -29,6 +29,14 @@
         <button class="btn" type="button" onclick="clearSearch()">مسح</button>
       </form>
     </div>
+    <!-- Member type tabs -->
+    <div style="margin-top:12px; display:flex; gap:8px; align-items:center">
+      <button class="btn" onclick="setMemberTypeFilter('all')">الكل</button>
+      <button class="btn" onclick="setMemberTypeFilter('bureau')">أعضاء المكتب</button>
+      <button class="btn" onclick="setMemberTypeFilter('active')">أعضاء عاملون</button>
+      <button class="btn" onclick="setMemberTypeFilter('sympathizer')">متعاطفون</button>
+      <button class="btn" id="showAllTypesBtn" onclick="loadAllMemberTypes()">عرض كل الأنواع في جداول منفصلة</button>
+    </div>
     <% if (user && (user.role === 'admin' || user.role === 'secretary')) { %>
       <a href="/api/uploads/template" class="btn btn-secondary" style="margin-left:8px;vertical-align:middle">تحميل قالب Excel</a>
       <button class="btn btn-delete" style="margin-left:8px;vertical-align:middle" onclick="confirmDeleteAll()">حذف جميع الأعضاء</button>
@@ -102,7 +110,7 @@
         .detail-section { background:var(--bg); border-radius:10px; padding:10px }
     </style>
 
-    <table class="member-table">
+    <table class="member-table" id="singleMembersTable">
       <thead>
         <tr>
           <th>رقم العضوية</th>
@@ -118,7 +126,7 @@
           <th>
             <button type="button" class="th-sort" data-field="status" onclick="toggleSort('status')">الحالة <span class="sort-indicator"></span></button>
           </th>
-          <th>انضم في</th>
+          <th>تاريخ العضوية</th>
           <th>إجراءات</th>
         </tr>
       </thead>
@@ -149,6 +157,9 @@
         <% }) %>
       </tbody>
     </table>
+
+    <!-- Container where multiple type-specific tables will be injected -->
+    <div id="multiTablesContainer" style="margin-top:12px; display:none"></div>
 
     <!-- Pagination controls -->
     <% if (typeof pagination !== 'undefined') { %>
@@ -182,6 +193,10 @@
         <div class="form-row">
           <label class="form-label">تاريخ الميلاد</label>
           <input class="form-control" type="date" name="dateOfBirth" placeholder="تاريخ الميلاد">
+        </div>
+        <div class="form-row">
+          <label class="form-label">تاريخ العضوية</label>
+          <input class="form-control" type="date" name="membershipDate" placeholder="تاريخ العضوية">
         </div>
         <div class="form-row">
           <label class="form-label">النوع</label>
@@ -325,6 +340,10 @@
         <div class="form-row">
           <label class="form-label">تاريخ الميلاد</label>
           <input class="form-control" type="date" name="dateOfBirth" placeholder="تاريخ الميلاد">
+        </div>
+        <div class="form-row">
+          <label class="form-label">تاريخ العضوية <span style="color:#c00">*</span></label>
+          <input class="form-control" type="date" name="membershipDate" placeholder="تاريخ العضوية" required>
         </div>
         <div class="form-row">
           <label class="form-label">نوع العضوية</label>
@@ -525,7 +544,8 @@ function doSearch(e){
   if(q && String(q).trim()) p.set('q', String(q).trim());
   else p.delete('q');
   p.set('page','1');
-    
+  // navigate to updated query params so the server can handle the search
+  location.search = p.toString();
 }
 
 function clearSearch(){
@@ -613,6 +633,72 @@ function openMemberAdd(){
   attachConditionalFieldsHandlers(form);
   attachRoleSelector(form);
   openModal('addModal');
+}
+
+// Set memberType filter by updating URL params and reloading.
+function setMemberTypeFilter(type){
+  const p = new URLSearchParams(location.search);
+  if(!type || type === 'all') p.delete('memberType'); else p.set('memberType', type);
+  p.set('page','1');
+  location.search = p.toString();
+}
+
+// Fetch members for a specific type and return JSON array
+async function fetchMembersByType(type){
+  const url = '/api/members?memberType=' + encodeURIComponent(type);
+  try{
+    const resp = await fetch(url, { credentials: 'same-origin' });
+    if(!resp.ok) return [];
+    const data = await resp.json();
+    return Array.isArray(data) ? data : (data.data || []);
+  }catch(e){ console.error('fetchMembersByType', e); return []; }
+}
+
+// Render a simple table HTML for a members array (readonly)
+function renderMembersTableHtml(title, members){
+  const rows = members.map(m => {
+  const memberTypeLabel = m.memberType === 'bureau' ? 'أعضاء المكتب' : m.memberType === 'active' ? 'أعضاء عاملون' : m.memberType === 'sympathizer' ? 'متعاطفون' : (m.memberType || '-');
+  const joined = m.joinedAt ? new Date(m.joinedAt).toISOString().slice(0,10) : '-';
+    return `<tr data-member-id="${m._id}" style="cursor:pointer"><td class="small">${m.membershipId || '-'}</td><td><strong>${m.fullName || '-'}</strong></td><td class="small">${m.phone || '-'}</td><td class="small">${m.email || '-'}</td><td class="small">${m.role || '-'}</td><td class="small">${memberTypeLabel}</td><td class="small">${m.status === 'active' ? 'نشط' : m.status === 'inactive' ? 'غير نشط' : (m.status || '-')}</td><td class="small">${joined}</td></tr>`;
+  }).join('');
+
+    return `
+    <div style="margin-top:18px">
+      <h3 style="margin:6px 0">${title} (${members.length})</h3>
+      <table class="member-table"><thead><tr><th>رقم العضوية</th><th>الاسم الكامل</th><th>الهاتف</th><th>البريد الإلكتروني</th><th>المهمة</th><th>نوع العضوية</th><th>الحالة</th><th>تاريخ العضوية</th></tr></thead><tbody>${rows}</tbody></table>
+    </div>
+  `;
+}
+
+// Load and render separate tables for each member type
+async function loadAllMemberTypes(){
+  const container = document.getElementById('multiTablesContainer');
+  const single = document.getElementById('singleMembersTable');
+  const btn = document.getElementById('showAllTypesBtn');
+  if(!container || !single) return;
+  // toggle: if visible, hide and restore single table
+  if(container.style.display !== 'none'){
+    container.style.display = 'none';
+    container.innerHTML = '';
+    single.style.display = '';
+    if(btn) btn.textContent = 'عرض كل الأنواع في جداول منفصلة';
+    return;
+  }
+  // show loading
+  single.style.display = 'none';
+  container.style.display = '';
+  container.innerHTML = '<div class="small">تحميل...</div>';
+  if(btn) btn.textContent = 'إخفاء الجداول المجمعة';
+
+  const types = [ ['bureau','أعضاء المكتب'], ['active','أعضاء عاملون'], ['sympathizer','متعاطفون'] ];
+  const parts = [];
+  for(const [code,label] of types){
+    const members = await fetchMembersByType(code);
+    parts.push(renderMembersTableHtml(label, members));
+  }
+  container.innerHTML = parts.join('\n');
+  // attach click delegation for dynamically added rows
+  container.querySelectorAll('tr[data-member-id]').forEach(tr => tr.addEventListener('click', (e)=>{ const id = tr.dataset.memberId; if(id) showMemberDetail(id); }));
 }
 function closeMemberAdd(){
   // remove any cloned form from modal body and keep the template intact
@@ -764,6 +850,11 @@ function editMember(id){
       } catch (e) {
         form.querySelector('input[name="dateOfBirth"]').value = member.dateOfBirth || '';
       }
+      try {
+        form.querySelector('input[name="membershipDate"]').value = member.joinedAt ? new Date(member.joinedAt).toISOString().slice(0,10) : '';
+      } catch (e) {
+        form.querySelector('input[name="membershipDate"]').value = member.joinedAt || '';
+      }
       form.querySelector('select[name="gender"]').value = member.gender || 'M';
       form.querySelector('select[name="memberType"]').value = member.memberType || 'active';
       form.querySelector('input[name="role"]').value = member.role || '';
@@ -874,7 +965,7 @@ async function showMemberDetail(id){
           <div class="detail-section"><div class="detail-label">المستوى الدراسي</div><div class="detail-value">${(m.educationLevel || 'other')}</div></div>
           <div class="detail-section"><div class="detail-label">المهنة</div><div class="detail-value">${(m.occupation || 'other')}</div></div>
           <div class="detail-section"><div class="detail-label">نوع العضوية</div><div class="detail-value">${m.memberType || '-'}</div></div>
-          <div class="detail-section"><div class="detail-label">انضم في</div><div class="detail-value">${m.joinedAt ? new Date(m.joinedAt).toISOString().slice(0,10) : '-'}</div></div>
+          <div class="detail-section"><div class="detail-label">تاريخ العضوية</div><div class="detail-value">${m.joinedAt ? new Date(m.joinedAt).toISOString().slice(0,10) : '-'}</div></div>
           <div style="grid-column:1 / -1" class="detail-section"><div class="detail-label">تجارب حزبية سابقة</div><div class="detail-value">${m.previousPartyExperiences || '-'}</div></div>
           <div style="grid-column:1 / -1" class="detail-section"><div class="detail-label">السيرة / ملاحظات</div><div class="detail-value">${m.bio || '-'}</div></div>
           <div class="detail-section"><div class="detail-label">عضوية هيئات مجالية</div><div class="detail-value">${m.memberOfRegionalBodies ? 'نعم' : 'لا'}</div></div>

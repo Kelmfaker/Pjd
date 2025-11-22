@@ -10,18 +10,21 @@
   </style>
 
     <div class="container">
-      <div class="card">
-        <h2>أعضاء المكتب</h2>
-        <p id="bureauCount">—</p>
-      </div>
-      <div class="card">
-        <h2>الأعضاء العاملون</h2>
-        <p id="activeCount">—</p>
-      </div>
-      <div class="card">
-        <h2>المتعاطفون</h2>
-        <p id="sympathizerCount">—</p>
-      </div>
+      <% const isViewer = (user && user.role) ? String(user.role).toLowerCase() === 'viewer' : false; %>
+      <% if (!isViewer) { %>
+        <div class="card">
+          <h2>أعضاء المكتب</h2>
+          <p id="bureauCount">—</p>
+        </div>
+        <div class="card">
+          <h2>الأعضاء العاملون</h2>
+          <p id="activeCount">—</p>
+        </div>
+        <div class="card">
+          <h2>المتعاطفون</h2>
+          <p id="sympathizerCount">—</p>
+        </div>
+      <% } %>
       <div class="card">
         <h2>الأنشطة القادمة</h2>
         <p id="upcomingActivities">—</p>

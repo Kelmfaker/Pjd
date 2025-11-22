@@ -73,8 +73,8 @@ async function main(){
       email: `bulk${seed}@example.com`,
       memberType: 'active',
       status: 'active',
-      joinedAt: new Date()
     };
+    // Do NOT auto-set `membershipDate` here — membership date must be provided explicitly.
     try {
       const m = new Member(payload);
       await m.save();

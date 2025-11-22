@@ -55,7 +55,7 @@ function mapRowToMember(row) {
     gender: mapped.gender || mapped.sex || mapped['الجنس'],
     status: mapped.status || mapped['الحالة'],
     memberType: mapped.membertype || mapped['member_type'] || mapped['type'],
-    joinedAt: mapped.joinedat || mapped['joined_at'] || mapped.joined || mapped['join_date'] || mapped['تاريخ الانضمام'] || mapped['تاريخ_الانضمام'],
+    joinedAt: mapped.joinedat || mapped['joined_at'] || mapped.joined || mapped['join_date'] || mapped['تاريخ العضوية'] || mapped['تاريخ_العضوية'] || mapped['تاريخ الانضمام'] || mapped['تاريخ_الانضمام'],
     educationLevel: mapped.educationlevel || mapped.education || mapped['education_level'],
     occupation: mapped.occupation || mapped.job || mapped['العمل'],
     role: mapped.role || mapped.position || mapped['المهمة'] || mapped['المهمة (نص)'],
@@ -98,11 +98,39 @@ router.post('/members-import', upload.single('file'), async (req, res) => {
         // Basic normalization to satisfy Member schema defaults/constraints
         if (!payload.memberType) payload.memberType = 'active';
         if (!payload.status) payload.status = 'active';
-        if (payload.joinedAt) {
-          // try common Excel date formats and ISO strings
-          const parsed = new Date(payload.joinedAt);
-          if (!isNaN(parsed)) payload.joinedAt = parsed;
-          else delete payload.joinedAt;
+        // accept either `membershipDate` (new label) or `joinedAt` from the sheet
+        const rawDateValue = payload.membershipDate || payload.joinedAt;
+        if (rawDateValue !== undefined && rawDateValue !== null && String(rawDateValue).trim() !== '') {
+          try {
+            // If the value looks like yyyy-mm-dd, parse as date-only (UTC midnight)
+            const s = String(rawDateValue).trim();
+            const isoDateMatch = /^\s*(\d{4})-(\d{1,2})-(\d{1,2})\s*$/.exec(s);
+            if (isoDateMatch) {
+              const y = Number(isoDateMatch[1]);
+              const m = Number(isoDateMatch[2]);
+              const d = Number(isoDateMatch[3]);
+              if (!Number.isNaN(y) && !Number.isNaN(m) && !Number.isNaN(d)) {
+                payload.joinedAt = new Date(Date.UTC(y, m - 1, d));
+              }
+            } else if (typeof rawDateValue === 'number' || /^\d+(?:\.\d+)?$/.test(s)) {
+              // Excel may produce serial numbers; treat numeric values as Excel date serial (days since 1899-12-30)
+              const num = Number(rawDateValue);
+              if (!Number.isNaN(num)) {
+                const excelEpoch = Date.UTC(1899, 11, 30); // 1899-12-30
+                const ms = Math.round(num * 24 * 60 * 60 * 1000);
+                payload.joinedAt = new Date(excelEpoch + ms);
+              }
+            } else {
+              // Fallback: try native Date parsing
+              const parsed = new Date(rawDateValue);
+              if (!isNaN(parsed)) payload.joinedAt = parsed;
+            }
+          } catch (e) {
+            // invalid -> don't set joinedAt
+          }
+        } else {
+          // no date provided in sheet: ensure we don't send an empty value downstream
+          delete payload.joinedAt;
         }
         if (payload.gender) {
           const g = String(payload.gender).trim().toLowerCase();

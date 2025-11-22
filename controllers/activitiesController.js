@@ -140,6 +140,10 @@ export const regenerateQrToken = async (req, res) => {
 // Render a dedicated attendance page for an activity (UI)
 export const renderActivityAttendancePage = async (req, res) => {
   try {
+    // Prevent viewers from seeing member attendance lists — redirect to activities list
+    if (req.user && String(req.user.role).toLowerCase() === 'viewer') {
+      return res.redirect('/activities');
+    }
     const activityId = req.params.id;
     const activity = await Activity.findById(activityId).populate('responsible', 'fullName memberType');
     if (!activity) return res.status(404).send('النشاط غير موجود');

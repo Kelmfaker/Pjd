@@ -69,9 +69,13 @@
               <button onclick="location.href='/activities'">أنشطة</button>
             <% } else if (role === 'responsible') { %>
               <button onclick="location.href='/activities'">مهامّي</button>
+              <% if (user && user.member && user.member.role) { %>
+                <button onclick="location.href='/activities?memberRole=<%= encodeURIComponent(user.member.role) %>'"><%= user.member.role %></button>
+              <% } %>
               <button onclick="location.href='/attendance/qr'">QR تسجيل</button>
             <% } else if (role === 'viewer') { %>
-              <button onclick="location.href='/members'">عرض الأعضاء</button>
+              <!-- Viewer: show activities list only (read-only) -->
+              <button onclick="location.href='/activities'">عرض الأنشطة</button>
             <% } %>
           </div>
         <% } %>

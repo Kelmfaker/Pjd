@@ -100,7 +100,8 @@ export const exportAttendancePdf = async (req, res) => {
       const name = a.memberId && a.memberId.fullName ? a.memberId.fullName : (a.memberId ? String(a.memberId) : '—');
       const memberType = a.memberId && (a.memberId.memberType || a.memberId.type) ? translateMemberType(a.memberId.memberType || a.memberId.type) : '';
       const status = translateStatus(a.presenceStatus || '');
-      const when = a.recordedAt ? new Date(a.recordedAt).toLocaleDateString('ar-MA') : '';
+      // show time (HH:MM) instead of date for the recorded timestamp
+      const when = a.recordedAt ? new Date(a.recordedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
       const recorder = a.recordedBy ? (a.recordedBy.username || String(a.recordedBy)) : '';
       return `<tr><td style="border:1px solid #ccc;padding:6px">${name}</td><td style="border:1px solid #ccc;padding:6px;text-align:center">${memberType}</td><td style="border:1px solid #ccc;padding:6px">${status}</td><td style="border:1px solid #ccc;padding:6px">${when}</td><td style="border:1px solid #ccc;padding:6px">${recorder}</td></tr>`;
     }).join('');
