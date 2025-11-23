@@ -28,8 +28,35 @@ router.get('/template', (req, res) => {
   }
 });
 
-// Use memory storage — we'll parse buffer directly
+// Use memory storage — we'll parse buffer directly for imports
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+
+// Disk storage for image uploads (members photos)
+const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
+try { fs.mkdirSync(uploadsDir, { recursive: true }); } catch (e) { /* ignore */ }
+const imageStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadsDir);
+  },
+  filename: function (req, file, cb) {
+    const safeName = String(Date.now()) + '-' + file.originalname.replace(/[^a-z0-9.\-\_\u0600-\u06FF]/gi, '_');
+    cb(null, safeName);
+  }
+});
+const uploadImage = multer({ storage: imageStorage, limits: { fileSize: 5 * 1024 * 1024 } });
+
+// POST /api/uploads/photo -> accept single image file 'photoFile' and return public URL
+router.post('/photo', uploadImage.single('photoFile'), (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+    // public URL served under /static/uploads/<filename>
+    const url = '/static/uploads/' + req.file.filename;
+    res.json({ ok: true, url });
+  } catch (err) {
+    console.error('Photo upload error', err);
+    res.status(500).json({ message: err && err.message ? err.message : 'Upload failed' });
+  }
+});
 
 function mapRowToMember(row) {
   // Normalize header keys (lowercase, trim, remove spaces/underscores)
@@ -61,14 +88,16 @@ function mapRowToMember(row) {
     role: mapped.role || mapped.position || mapped['المهمة'] || mapped['المهمة (نص)'],
     bio: mapped.bio || mapped.notes || mapped.description,
     pdfUrl: mapped.pdfurl || mapped.cv || mapped.resume,
-    cin: mapped.cin || mapped['cin'] || mapped['الرقم_الوطني'] || mapped['الرقم الوطني'] || mapped['cin_number']
+    cin: mapped.cin || mapped['cin'] || mapped['الرقم_الوطني'] || mapped['الرقم الوطني'] || mapped['cin_number'],
+    photoUrl: mapped.photourl || mapped['photo_url'] || mapped['الصورة'] || mapped.image,
+    neighborhood: mapped.neighborhood || mapped['الحي'] || mapped.area,
+    financialCommitment: mapped.financialcommitment || mapped['الالتزام_المالي'] || mapped['الالتزام المالي']
   };
 
   // Remove undefined fields
   Object.keys(payload).forEach(k => { if (payload[k] === undefined) delete payload[k]; });
   return payload;
 }
-
 // POST /api/uploads/members-import
 router.post('/members-import', upload.single('file'), async (req, res) => {
   try {
@@ -149,6 +178,12 @@ router.post('/members-import', upload.single('file'), async (req, res) => {
           payload.cin = c.replace(/[-\s]+/g, '') || undefined;
           if (!payload.cin) delete payload.cin;
         }
+        if (payload.photoUrl && typeof payload.photoUrl === 'string') {
+          payload.photoUrl = String(payload.photoUrl).trim() || undefined;
+          if (!payload.photoUrl) delete payload.photoUrl;
+        }
+        if (payload.neighborhood && typeof payload.neighborhood === 'string') payload.neighborhood = payload.neighborhood.trim();
+        if (payload.financialCommitment && typeof payload.financialCommitment === 'string') payload.financialCommitment = payload.financialCommitment.trim();
         // normalize phone by removing spaces, dashes and parentheses
         if (payload.phone && typeof payload.phone === 'string') {
           payload.phone = payload.phone.replace(/[\s\-()]+/g, '').trim();

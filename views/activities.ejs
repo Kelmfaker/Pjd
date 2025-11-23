@@ -222,10 +222,11 @@ async function generateQr(id, title){
     const printableUrl = data.printableUrl || (`/?activity=${id}&token=${token}`);
     const w = window.open('', '_blank', 'width=600,height=400');
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>طباعة QR</title>
-      <style>body{font-family:Arial;text-align:center;padding:20px} .card{border:1px solid #ddd;padding:16px;border-radius:8px;display:inline-block}</style>
+      <style>body{font-family:Arial;text-align:center;padding:20px} .card{border:1px solid #ddd;padding:16px;border-radius:8px;display:inline-block} a.btn{display:inline-block;padding:8px 12px;background:#28a745;color:#fff;border-radius:6px;text-decoration:none;margin:6px}</style>
       </head><body><div class="card"><h2>${(title || '').replace(/</g,'&lt;')}</h2><p>رمز: <strong>${token}</strong></p>
       <p>رابط الطباعة/التحقق:</p><p><a href="${printableUrl}" target="_blank">${printableUrl}</a></p>
-      <p><button onclick="window.print()">طباعة</button></p></div></body></html>`;
+      <p><a class="btn" href="/api/activities/${id}/qr.png?token=${token}" target="_blank" rel="noopener noreferrer">تحميل رمز QR (PNG)</a>
+      <button onclick="window.print()">طباعة</button></p></div></body></html>`;
     w.document.open(); w.document.write(html); w.document.close();
   } catch(err){ console.error(err); alert(err.message || 'خطأ في الشبكة'); }
 }

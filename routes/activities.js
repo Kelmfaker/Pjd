@@ -7,6 +7,7 @@ import {
   deleteActivity
   ,checkInByQr
   ,regenerateQrToken
+  ,serveQrPng
 } from "../controllers/activitiesController.js";
 import { renderActivityAttendancePage } from '../controllers/activitiesController.js';
 import { authenticate, authorizeRoles } from "../middlewares/auth.js";
@@ -14,6 +15,8 @@ import { authenticate, authorizeRoles } from "../middlewares/auth.js";
 const router = express.Router();
 
 router.get("/", authenticate, authorizeRoles('admin','secretary','responsible','viewer'), getAllActivities);          // عرض كل الأنشطة (محمي)
+// Serve PNG QR for activity (requires matching token query param)
+router.get('/:id/qr.png', authenticate, authorizeRoles('admin','secretary'), serveQrPng);
 router.get("/:id", authenticate, authorizeRoles('admin','secretary','responsible','viewer'), getActivityById);       // عرض نشاط واحد (محمي)
 router.post("/", authenticate, authorizeRoles('admin','secretary'), createActivity);          // إضافة نشاط جديد (محمي)
 router.put("/:id", authenticate, authorizeRoles('admin','secretary'), updateActivity);        // تعديل نشاط (محمي)

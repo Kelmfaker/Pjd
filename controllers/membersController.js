@@ -1,6 +1,7 @@
 import Member from "../models/Member.js";
 import { logAudit } from '../utils/audit.js';
 import User from "../models/User.js";
+import { safeUnlink } from '../utils/uploads.js';
 
 // Normalize incoming member fields (map localized labels to canonical enum values)
 function normalizeMemberInput(input = {}) {
@@ -42,6 +43,31 @@ function normalizeMemberInput(input = {}) {
     if (payload.role && typeof payload.role === 'string') payload.role = payload.role.trim();
     if (payload.bio && typeof payload.bio === 'string') payload.bio = payload.bio.trim();
     if (payload.pdfUrl && typeof payload.pdfUrl === 'string') payload.pdfUrl = payload.pdfUrl.trim();
+    if (payload.photoUrl && typeof payload.photoUrl === 'string') payload.photoUrl = payload.photoUrl.trim();
+
+    // Normalize and validate national ID (cin). If the incoming value is empty string
+    // or only whitespace, remove the key so we don't persist empty values which can
+    // cause duplicate-key errors on a unique index.
+    if ('cin' in payload) {
+      const rawCin = payload.cin;
+      if (rawCin === null || (typeof rawCin === 'string' && rawCin.trim() === '')) {
+        delete payload.cin;
+      } else if (typeof rawCin === 'string') {
+        const c = rawCin.trim().toUpperCase().replace(/[-\s]+/g, '');
+        if (c === '') delete payload.cin; else payload.cin = c;
+      }
+    }
+
+    if (payload.neighborhood && typeof payload.neighborhood === 'string') {
+      payload.neighborhood = payload.neighborhood.trim();
+      // validate neighborhood against allowed list to avoid tampering
+      const allowedNeighborhoods = ['أكدال', 'دار دبيبغ', 'الأدارسة', 'الدكارات', 'سيدي ابراهيم', 'طارق'];
+      if (payload.neighborhood === '' || !allowedNeighborhoods.includes(payload.neighborhood)) {
+        // if not allowed or empty, remove the field so downstream won't persist invalid value
+        delete payload.neighborhood;
+      }
+    }
+    if (payload.financialCommitment && typeof payload.financialCommitment === 'string') payload.financialCommitment = payload.financialCommitment.trim();
     if (payload.cin && typeof payload.cin === 'string') {
       // national ID: normalize by trimming and uppercasing to reduce duplicates
       payload.cin = payload.cin.trim().toUpperCase();
@@ -199,6 +225,16 @@ export const updateMember = async (req, res) => {
     } catch (syncErr) {
       console.error('Failed to sync member role to linked user', syncErr && (syncErr.stack || syncErr));
     }
+    // If the member replaced their photo, delete the old local upload to avoid orphans
+    try {
+      if (before && before.photoUrl && before.photoUrl !== member.photoUrl) {
+        const removed = await safeUnlink(before.photoUrl);
+        if (removed) console.log('Removed old upload:', before.photoUrl);
+      }
+    } catch (e) {
+      console.error('Failed to remove old upload', e && (e.stack || e));
+    }
+
     res.json(member);
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -211,6 +247,16 @@ export const deleteMember = async (req, res) => {
     const member = await Member.findByIdAndDelete(req.params.id);
     if (!member) return res.status(404).json({ message: "العضو غير موجود" });
     await logAudit(req, 'delete', 'Member', member._id, member.toObject(), null);
+    // delete stored photo file if present
+    try {
+      if (member.photoUrl) {
+        const removed = await safeUnlink(member.photoUrl);
+        if (removed) console.log('Deleted upload for removed member:', member.photoUrl);
+      }
+    } catch (e) {
+      console.error('Failed to delete upload for removed member', e && (e.stack || e));
+    }
+
     res.json({ message: "تم حذف العضو بنجاح" });
   } catch (err) {
     res.status(500).json({ message: err.message });

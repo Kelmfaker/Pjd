@@ -3,6 +3,7 @@ import Member from "../models/Member.js";
 import Attendance from "../models/Attendance.js";
 import { logAudit } from '../utils/audit.js';
 import crypto from 'crypto';
+import QRCode from 'qrcode';
 
 // عرض كل الأنشطة
 export const getAllActivities = async (req, res) => {
@@ -133,6 +134,31 @@ export const regenerateQrToken = async (req, res) => {
     res.json({ message: 'تم إنشاء رمز QR للنشاط', token, printableUrl });
   } catch (err) {
     console.error('regenerateQrToken error', err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// Serve a PNG QR image for an activity. Requires the token query param to match activity.qrToken
+export const serveQrPng = async (req, res) => {
+  try {
+    const activityId = req.params.id;
+    const token = req.query.token;
+    const activity = await Activity.findById(activityId);
+    if (!activity) return res.status(404).json({ message: 'النشاط غير موجود' });
+
+    if (!activity.qrToken || !token || activity.qrToken !== token) {
+      return res.status(403).json({ message: 'رمز QR غير صالح أو لا يطابق النشاط' });
+    }
+
+    const baseUrl = process.env.APP_BASE_URL || `${req.protocol}://${req.get('host')}`;
+    const printableUrl = baseUrl ? `${baseUrl.replace(/\/$/, '')}/attendance/qr?activity=${activity._id}&token=${token}` : `/?activity=${activity._id}&token=${token}`;
+
+    const buffer = await QRCode.toBuffer(printableUrl, { type: 'png', width: 400 });
+    res.set('Content-Type', 'image/png');
+    res.set('Content-Disposition', `attachment; filename="activity-${activity._id}-qr.png"`);
+    res.send(buffer);
+  } catch (err) {
+    console.error('serveQrPng error', err);
     res.status(500).json({ message: err.message });
   }
 };

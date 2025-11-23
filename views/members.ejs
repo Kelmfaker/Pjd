@@ -119,6 +119,8 @@
           </th>
           <th>الهاتف</th>
           <th>البريد الإلكتروني</th>
+          <th>الحي</th>
+          <th>رقم البطاقة</th>
           <th>المهمة</th>
           <th>
             <button type="button" class="th-sort" data-field="memberType" onclick="toggleSort('memberType')">نوع العضوية <span class="sort-indicator"></span></button>
@@ -137,6 +139,8 @@
             <td><strong><%= member.fullName %></strong></td>
             <td class="small"><%= member.phone || "-" %></td>
             <td class="small"><%= member.email || "-" %></td>
+            <td class="small"><%= member.neighborhood || '-' %></td>
+            <td class="small"><%= member.cin || '-' %></td>
             <td class="small"><%= member.role || '-' %></td>
             <td class="small"><%= member.memberType === 'bureau' ? 'أعضاء المكتب' : member.memberType === 'active' ? 'أعضاء عاملون' : member.memberType === 'sympathizer' ? 'متعاطفون' : (member.memberType || '-') %></td>
             <td class="small"><%= member.status === 'active' ? 'نشط' : member.status === 'inactive' ? 'غير نشط' : (member.status || '-') %></td>
@@ -186,6 +190,23 @@
           <label class="form-label">البريد الإلكتروني</label>
           <input class="form-control" type="email" name="email" placeholder="البريد الإلكتروني">
         </div>
+        
+        <div class="form-row">
+          <label class="form-label">رقم البطاقة الوطنية</label>
+          <input class="form-control" type="text" name="cin" placeholder="رقم البطاقة الوطنية">
+        </div>
+        <div class="form-row">
+          <label class="form-label">الحي</label>
+          <select class="form-control" name="neighborhood">
+            <option value="">-- اختر الحي --</option>
+            <option value="أكدال">أكدال</option>
+            <option value="دار دبيبغ">دار دبيبغ</option>
+            <option value="الأدارسة">الأدارسة</option>
+            <option value="الدكارات">الدكارات</option>
+            <option value="سيدي ابراهيم">سيدي ابراهيم</option>
+            <option value="طارق">طارق</option>
+          </select>
+        </div>
         <div class="form-row">
           <label class="form-label">العنوان</label>
           <input class="form-control" type="text" name="address" placeholder="العنوان">
@@ -233,12 +254,22 @@
           <input class="form-control" type="url" name="pdfUrl" placeholder="رابط ملف PDF (اختياري)">
         </div>
         <div class="form-row">
+          <input type="hidden" name="photoUrl" />
+          <label class="form-label">الصورة الشخصية</label>
+          <input class="form-control photoFileInput" type="file" accept="image/*">
+          <div class="photoPreviewWrap" style="display:none;margin-top:8px">
+            <img class="photoPreviewImg" style="max-width:160px;border:1px solid #ddd;border-radius:8px" />
+          </div>
+        </div>
+        <div class="form-row">
           <label class="form-label">أو معاينة ملف PDF محلي</label>
           <input class="form-control pdfFileInput" type="file" accept="application/pdf">
           <div class="pdfPreview" style="display:none;margin-top:8px">
             <iframe class="pdfPreviewFrame" style="width:100%;height:300px;border:1px solid #ddd"></iframe>
           </div>
         </div>
+       
+       
         <div class="form-row">
           <label class="form-label">المستوى الدراسي</label>
           <select class="form-control" name="educationLevel">
@@ -312,6 +343,14 @@
     <!-- Edit form (hidden until editing) -->
     <form id="editFormTemplate" class="member-form" onsubmit="updateMember(event)">
       <h3>تعديل عضو</h3>
+       <div class="form-row">
+          <input type="hidden" name="photoUrl" />
+          <label class="form-label">الصورة الشخصية</label>
+          <input class="form-control photoFileInput" type="file" accept="image/*">
+          <div class="photoPreviewWrap" style="display:none;margin-top:8px">
+            <img class="photoPreviewImg" style="max-width:160px;border:1px solid #ddd;border-radius:8px" />
+          </div>
+        </div>
       <input type="hidden" name="_id" />
       <div class="form-grid">
         <div class="form-row">
@@ -325,6 +364,23 @@
         <div class="form-row">
           <label class="form-label">البريد الإلكتروني</label>
           <input class="form-control" type="email" name="email" placeholder="البريد الإلكتروني">
+        </div>
+        <div class="form-row">
+          <label class="form-label">رقم البطاقة الوطنية</label>
+          <input class="form-control" type="text" name="cin" placeholder="رقم البطاقة الوطنية">
+        </div>
+
+        <div class="form-row">
+          <label class="form-label">الحي</label>
+          <select class="form-control" name="neighborhood">
+            <option value="">-- اختر الحي --</option>
+            <option value="أكدال">أكدال</option>
+            <option value="دار دبيبغ">دار دبيبغ</option>
+            <option value="الأدارسة">الأدارسة</option>
+            <option value="الدكارات">الدكارات</option>
+            <option value="سيدي ابراهيم">سيدي ابراهيم</option>
+            <option value="طارق">طارق</option>
+          </select>
         </div>
         <div class="form-row">
           <label class="form-label">النوع</label>
@@ -346,6 +402,10 @@
           <input class="form-control" type="date" name="membershipDate" placeholder="تاريخ العضوية" required>
         </div>
         <div class="form-row">
+          <label class="form-label">الالتزام المالي</label>
+          <input class="form-control" type="text" name="financialCommitment" placeholder="الالتزام المالي (مثال: مدفوع، معلق، مبلغ...)">
+        </div>
+        <div class="form-row">
           <label class="form-label">نوع العضوية</label>
           <select class="form-control" name="memberType">
             <option value="bureau">أعضاء المكتب</option>
@@ -359,8 +419,8 @@
             <option value="none">بدون</option>
             <option value="primary">ابتدائي</option>
             <option value="secondary">ثانوي</option>
-            <option value="bachelor">بكالوريوس</option>
-            <option value="master">ماجستير</option>
+            <option value="bachelor">إجازة</option>
+            <option value="master">ماستر</option>
             <option value="phd">دكتوراه</option>
             <option value="other">أخرى</option>
           </select>
@@ -656,16 +716,16 @@ async function fetchMembersByType(type){
 
 // Render a simple table HTML for a members array (readonly)
 function renderMembersTableHtml(title, members){
-  const rows = members.map(m => {
+    const rows = members.map(m => {
   const memberTypeLabel = m.memberType === 'bureau' ? 'أعضاء المكتب' : m.memberType === 'active' ? 'أعضاء عاملون' : m.memberType === 'sympathizer' ? 'متعاطفون' : (m.memberType || '-');
   const joined = m.joinedAt ? new Date(m.joinedAt).toISOString().slice(0,10) : '-';
-    return `<tr data-member-id="${m._id}" style="cursor:pointer"><td class="small">${m.membershipId || '-'}</td><td><strong>${m.fullName || '-'}</strong></td><td class="small">${m.phone || '-'}</td><td class="small">${m.email || '-'}</td><td class="small">${m.role || '-'}</td><td class="small">${memberTypeLabel}</td><td class="small">${m.status === 'active' ? 'نشط' : m.status === 'inactive' ? 'غير نشط' : (m.status || '-')}</td><td class="small">${joined}</td></tr>`;
+    return `<tr data-member-id="${m._id}" style="cursor:pointer"><td class="small">${m.membershipId || '-'}</td><td><strong>${m.fullName || '-'}</strong></td><td class="small">${m.phone || '-'}</td><td class="small">${m.email || '-'}</td><td class="small">${m.neighborhood || '-'}</td><td class="small">${m.cin || '-'}</td><td class="small">${m.role || '-'}</td><td class="small">${memberTypeLabel}</td><td class="small">${m.status === 'active' ? 'نشط' : m.status === 'inactive' ? 'غير نشط' : (m.status || '-')}</td><td class="small">${joined}</td></tr>`;
   }).join('');
 
     return `
     <div style="margin-top:18px">
       <h3 style="margin:6px 0">${title} (${members.length})</h3>
-      <table class="member-table"><thead><tr><th>رقم العضوية</th><th>الاسم الكامل</th><th>الهاتف</th><th>البريد الإلكتروني</th><th>المهمة</th><th>نوع العضوية</th><th>الحالة</th><th>تاريخ العضوية</th></tr></thead><tbody>${rows}</tbody></table>
+      <table class="member-table"><thead><tr><th>رقم العضوية</th><th>الاسم الكامل</th><th>الهاتف</th><th>البريد الإلكتروني</th><th>الحي</th><th>رقم البطاقة</th><th>المهمة</th><th>نوع العضوية</th><th>الحالة</th><th>تاريخ العضوية</th></tr></thead><tbody>${rows}</tbody></table>
     </div>
   `;
 }
@@ -742,6 +802,26 @@ function attachPdfPreviewHandlers(form){
       else { if(previewFrame) previewFrame.src = ''; if(previewWrap) previewWrap.style.display = 'none'; }
     });
   }
+  // photo preview: handle local file input and photoUrl field
+  try{
+    const photoInput = form.querySelector('.photoFileInput');
+    const photoWrap = form.querySelector('.photoPreviewWrap');
+    const photoImg = form.querySelector('.photoPreviewImg');
+    const photoUrlInput = form.querySelector('input[name="photoUrl"]');
+    if(photoInput){
+      photoInput.addEventListener('change', (e)=>{
+        const f = e.target.files && e.target.files[0];
+        if(f){
+          try{ const url = URL.createObjectURL(f); if(photoImg) photoImg.src = url; if(photoWrap) photoWrap.style.display = 'block'; }catch(err){ console.error('خطأ في معاينة الصورة', err); }
+        } else { if(photoImg) photoImg.src = ''; if(photoWrap) photoWrap.style.display = 'none'; }
+      });
+    }
+    if(photoUrlInput){
+      photoUrlInput.addEventListener('input', (e)=>{
+        const v = (e.target.value || '').trim(); if(photoImg){ if(v){ photoImg.src = v; if(photoWrap) photoWrap.style.display = 'block'; } else { photoImg.src = ''; if(photoWrap) photoWrap.style.display = 'none'; } }
+      });
+    }
+  }catch(e){ /* ignore photo preview setup errors */ }
 }
 
 // attach role selector: keep a text input named 'role' in sync with a select[name="roleSelect"].
@@ -787,10 +867,29 @@ function attachConditionalFieldsHandlers(form){
 async function addMember(e){
   e.preventDefault();
   const form = e.target;
-  const data = Object.fromEntries(new FormData(form));
-  const r = await safeFetchJson('/api/members', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type':'application/json' }, body: JSON.stringify(data) });
-  if(r.ok) return location.reload();
-  alert(r.data && r.data.message ? r.data.message : 'حدث خطأ عند إضافة العضو');
+  try {
+    // If a local photo file is provided, upload it first to get a stable URL
+    const photoInput = form.querySelector('.photoFileInput');
+    let photoUrl;
+    if(photoInput && photoInput.files && photoInput.files[0]){
+      const fd = new FormData();
+      fd.append('photoFile', photoInput.files[0]);
+      const resp = await fetch('/api/uploads/photo', { method: 'POST', body: fd, credentials: 'same-origin' });
+      const j = await resp.json().catch(()=>({}));
+      if(!resp.ok) return alert(j && j.message ? j.message : 'فشل رفع الصورة');
+      photoUrl = j.url;
+    }
+    const data = Object.fromEntries(new FormData(form));
+    if(photoUrl) data.photoUrl = photoUrl;
+    // remove empty photoUrl so we don't persist empty strings
+    if ('photoUrl' in data && (!data.photoUrl || String(data.photoUrl).trim() === '')) delete data.photoUrl;
+    const r = await safeFetchJson('/api/members', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type':'application/json' }, body: JSON.stringify(data) });
+    if(r.ok) return location.reload();
+    alert(r.data && r.data.message ? r.data.message : 'حدث خطأ عند إضافة العضو');
+  } catch (err) {
+    console.error('addMember error', err);
+    alert('حدث خطأ في رفع البيانات');
+  }
 }
 
 async function deleteMember(id){
@@ -844,6 +943,10 @@ function editMember(id){
       form.querySelector('input[name="phone"]').value = member.phone || '';
       form.querySelector('input[name="email"]').value = member.email || '';
       form.querySelector('input[name="address"]').value = member.address || '';
+      form.querySelector('input[name="cin"]').value = member.cin || '';
+      // neighborhood is a select in the form
+      const nbSel = form.querySelector('select[name="neighborhood"]');
+      if (nbSel) nbSel.value = member.neighborhood || '';
       // dateOfBirth may be a Date; if present, format to yyyy-mm-dd for input[type=date]
       try {
         form.querySelector('input[name="dateOfBirth"]').value = member.dateOfBirth ? new Date(member.dateOfBirth).toISOString().slice(0,10) : '';
@@ -872,6 +975,14 @@ function editMember(id){
       const pv = form.querySelector('.pdfPreview');
       const pf = form.querySelector('.pdfPreviewFrame');
       if(member.pdfUrl && pf && pv){ pf.src = member.pdfUrl; pv.style.display = 'block'; } else if(pf && pv){ pf.src = ''; pv.style.display = 'none'; }
+      // initialize photo preview for edit form
+      try{
+        const photoWrap = form.querySelector('.photoPreviewWrap');
+        const photoImg = form.querySelector('.photoPreviewImg');
+        const photoUrlInput = form.querySelector('input[name="photoUrl"]');
+        if(photoUrlInput) photoUrlInput.value = member.photoUrl || '';
+        if(photoImg && photoWrap){ if(member.photoUrl){ photoImg.src = member.photoUrl; photoWrap.style.display = 'block'; } else { photoImg.src = ''; photoWrap.style.display = 'none'; } }
+      }catch(e){ /* ignore */ }
       form.querySelector('select[name="status"]').value = member.status || 'active';
       document.getElementById('editModalTitle').textContent = 'تعديل عضو';
       const body = document.getElementById('editModalBody');
@@ -902,9 +1013,23 @@ function editMember(id){
 async function updateMember(e){
   e.preventDefault();
   const form = e.target;
-  const data = Object.fromEntries(new FormData(form));
-  const id = data._id; delete data._id;
   try {
+    // If a new photo file was selected, upload it first.
+    const photoInput = form.querySelector('.photoFileInput');
+    let photoUrl;
+    if(photoInput && photoInput.files && photoInput.files[0]){
+      const fd = new FormData();
+      fd.append('photoFile', photoInput.files[0]);
+      const resp = await fetch('/api/uploads/photo', { method: 'POST', body: fd, credentials: 'same-origin' });
+      const j = await resp.json().catch(()=>({}));
+      if(!resp.ok) return alert(j && j.message ? j.message : 'فشل رفع الصورة');
+      photoUrl = j.url;
+    }
+    const data = Object.fromEntries(new FormData(form));
+    const id = data._id; delete data._id;
+    if(photoUrl) data.photoUrl = photoUrl;
+    // remove empty photoUrl to avoid persisting empty string
+    if ('photoUrl' in data && (!data.photoUrl || String(data.photoUrl).trim() === '')) delete data.photoUrl;
     const r = await safeFetchJson('/api/members/' + id, { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type':'application/json' }, body: JSON.stringify(data) });
     if(!r.ok) return alert(r.data && r.data.message ? r.data.message : 'فشل في تحديث العضو');
     location.reload();
@@ -961,6 +1086,10 @@ async function showMemberDetail(id){
           <div class="detail-section"><div class="detail-label">الهاتف</div><div class="detail-value">${m.phone || '-'}</div></div>
           <div class="detail-section"><div class="detail-label">البريد الإلكتروني</div><div class="detail-value">${m.email || '-'}</div></div>
           <div class="detail-section"><div class="detail-label">العنوان</div><div class="detail-value">${m.address || '-'}</div></div>
+          <div class="detail-section"><div class="detail-label">الحي</div><div class="detail-value">${m.neighborhood || '-'}</div></div>
+          <div class="detail-section"><div class="detail-label">رقم البطاقة الوطنية</div><div class="detail-value">${m.cin || '-'}</div></div>
+          <div class="detail-section"><div class="detail-label">الالتزام المالي</div><div class="detail-value">${m.financialCommitment || '-'}</div></div>
+          <div class="detail-section"><div class="detail-label">الصورة</div><div class="detail-value">${m.photoUrl ? `<img src="${m.photoUrl}" alt="${m.fullName || ''}" style="max-width:160px;border-radius:8px" />` : '-'}</div></div>
           <div class="detail-section"><div class="detail-label">تاريخ الميلاد</div><div class="detail-value">${m.dateOfBirth ? new Date(m.dateOfBirth).toISOString().slice(0,10) : '-'}</div></div>
           <div class="detail-section"><div class="detail-label">المستوى الدراسي</div><div class="detail-value">${(m.educationLevel || 'other')}</div></div>
           <div class="detail-section"><div class="detail-label">المهنة</div><div class="detail-value">${(m.occupation || 'other')}</div></div>

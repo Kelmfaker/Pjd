@@ -6,7 +6,20 @@ const memberSchema = new mongoose.Schema({
   fullName: { type: String, required: true },
   phone: { type: String },
   email: { type: String, lowercase: true, trim: true },
-  cin: { type: String, unique: true, sparse: true, index: true, trim: true },
+  cin: {
+    type: String,
+    unique: true,
+    sparse: true,
+    index: true,
+    trim: true,
+    set: function(v) {
+      if (v === null || typeof v === 'undefined') return v;
+      const s = String(v).trim();
+      if (s === '') return undefined; // don't persist empty-string
+      // normalize: uppercase and remove spaces/dashes
+      return s.toUpperCase().replace(/[-\s]+/g, '');
+    }
+  },
   address: { type: String },
   dateOfBirth: { type: Date },
   bio: { type: String },
@@ -16,6 +29,9 @@ const memberSchema = new mongoose.Schema({
   memberType: { type: String, enum: ['bureau', 'active', 'sympathizer'], required: true },
   role: { type: String }, // role if bureau member (e.g., president, treasurer)
   pdfUrl: { type: String },
+  photoUrl: { type: String },
+  neighborhood: { type: String },
+  financialCommitment: { type: String },
   memberOfRegionalBodies: { type: Boolean, default: false },
   memberOfRegionalBodiesDetail: { type: String },
   assignedMission: { type: Boolean, default: false },

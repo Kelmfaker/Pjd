@@ -21,6 +21,9 @@ const headers = [
   'occupation', 'المهنة',
   'status', 'الحالة',
   'pdfUrl', 'رابط_PDF',
+  'photoUrl', 'رابط_الصورة', 'الصورة',
+  'neighborhood', 'الحي',
+  'financialCommitment', 'الالتزام_المالي', 'الالتزام المالي',
   'bio', 'سيرة'
 ];
 
